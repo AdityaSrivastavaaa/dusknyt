@@ -1,0 +1,242 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  PROMOTER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  EXPIRED
+}
+
+enum OfferStatus {
+  ACTIVE
+  UPCOMING
+  EXPIRED
+  DRAFT
+  INACTIVE
+}
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+
+model User {
+  id            String         @id @default(cuid())
+  role          Role           @default(USER)
+  phone         String?        @unique
+  email         String?        @unique
+  passwordHash  String?
+  name          String?
+  dob           DateTime?
+  avatar        String?
+  status        EntityStatus   @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  promoter      Promoter?
+  requests      GuestRequest[]
+  saved         Saved[]
+  notifications Notification[]
+  tickets       Ticket[]
+}
+
+model Promoter {
+  id        String       @id @default(cuid())
+  userId    String       @unique
+  brand     String
+  company   String?
+  logo      String?
+  status    EntityStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offers    Offer[]
+  payouts   Payout[]
+}
+
+model City {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  isPopular Boolean @default(false)
+  clubs     Club[]
+}
+
+model Club {
+  id        String       @id @default(cuid())
+  cityId    String
+  name      String
+  address   String
+  area      String?
+  phone     String?
+  email     String?
+  rating    Float        @default(4.2)
+  images    String[]
+  about     String?
+  music     String[]
+  dressCode String?
+  lat       Float?
+  lng       Float?
+  status    EntityStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  city      City         @relation(fields: [cityId], references: [id])
+  events    Event[]
+  offers    Offer[]
+  saved     Saved[]
+
+  @@index([cityId, status])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  clubId    String
+  title     String
+  djName    String?
+  date      DateTime
+  startTime String   @default("9:00 PM")
+  genre     String?
+  poster    String?
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  offers    Offer[]
+}
+
+model Offer {
+  id          String         @id @default(cuid())
+  clubId      String
+  eventId     String?
+  promoterId  String
+  title       String
+  entryType   String
+  offerType   String
+  price       Int            @default(0)
+  entryBefore String         @default("9:00 PM")
+  inclusions  String[]
+  terms       String?
+  description String?
+  status      OfferStatus    @default(ACTIVE)
+  date        DateTime
+  createdAt   DateTime       @default(now())
+  club        Club           @relation(fields: [clubId], references: [id])
+  event       Event?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  promoter    Promoter       @relation(fields: [promoterId], references: [id])
+  requests    GuestRequest[]
+  saved       Saved[]
+
+  @@index([clubId, status])
+  @@index([promoterId, status])
+}
+
+model GuestRequest {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  userId       String
+  offerId      String
+  guestCount   Int
+  guests       Json
+  note         String?
+  status       RequestStatus @default(PENDING)
+  rejectReason String?
+  promoterNote String?
+  qrCode       String?
+  reviewedById String?
+  seenAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id])
+  offer        Offer         @relation(fields: [offerId], references: [id])
+
+  @@index([offerId, status])
+  @@index([userId, status])
+}
+
+model Saved {
+  id      String  @id @default(cuid())
+  userId  String
+  clubId  String?
+  offerId String?
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club    Club?   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  offer   Offer?  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@unique([userId, offerId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  requestId String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model Payout {
+  id         String       @id @default(cuid())
+  promoterId String
+  amount     Int
+  status     PayoutStatus @default(PENDING)
+  paidAt     DateTime?
+  createdAt  DateTime     @default(now())
+  promoter   Promoter     @relation(fields: [promoterId], references: [id])
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  userId    String
+  subject   String
+  message   String
+  status    TicketStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String?
+  action    String
+  entity    String?
+  entityId  String?
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+model RoleDef {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  permissions String[]
+}

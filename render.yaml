@@ -1,0 +1,14 @@
+# Render blueprint for the API (frontends deploy to Vercel/Cloudflare Pages)
+services:
+  - type: web
+    name: dusknyt-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - { key: DATABASE_URL, sync: false }
+      - { key: JWT_SECRET, generateValue: true }
+      - { key: CORS_ORIGINS, value: "https://dusknyt.com,https://promoter.dusknyt.com,https://admin.dusknyt.com" }
+      - { key: NODE_ENV, value: production }
+      - { key: GOOGLE_CLIENT_ID, sync: false }

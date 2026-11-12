@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --bg: 247 246 252; --card: 255 255 255; --fg: 20 16 28; --muted: 108 102 128; --line: 226 222 238; }
+.dark { --bg: 11 8 18; --card: 24 18 36; --fg: 244 241 250; --muted: 150 142 170; --line: 44 36 64; }
+body { @apply bg-bg font-sans text-fg antialiased; }
+input, select, textarea, button { font: inherit; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

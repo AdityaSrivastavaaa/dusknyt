@@ -1,0 +1,16 @@
+{
+  "name": "dusknyt",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently -n api,user,promoter,admin -c gray,magenta,cyan,yellow \"npm:dev:api\" \"npm:dev:user\" \"npm:dev:promoter\" \"npm:dev:admin\"",
+    "dev:api": "npm run dev -w @dusknyt/api",
+    "dev:user": "npm run dev -w @dusknyt/user-web",
+    "dev:promoter": "npm run dev -w @dusknyt/promoter-web",
+    "dev:admin": "npm run dev -w @dusknyt/admin-web",
+    "build": "npm run build --workspaces --if-present",
+    "db:push": "npm run db:push -w @dusknyt/api",
+    "db:seed": "npm run db:seed -w @dusknyt/api"
+  },
+  "devDependencies": { "concurrently": "^8.2.2" }
+}

@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "prisma db push --skip-generate && node src/server.js",
-    "postinstall": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js"
-  },
+"scripts": {
+  "dev": "nodemon src/server.js",
+  "start": "node src/server.js",
+  "postinstall": "prisma generate",
+  "db:push": "prisma db push",
+  "db:seed": "node prisma/seed.js"
+},
   "dependencies": {
     "@dusknyt/shared": "*",
     "@prisma/client": "^5.22.0",

@@ -1,20 +1,51 @@
-import { isProd } from '../config/env.js';
 
-// In-memory store: fine for one instance. Use Redis (Upstash) when you scale to several.
+import { randomInt } from 'node:crypto';
+import { isProd, env } from '../config/env.js';
+
+// Temporary in-memory OTP store
 const store = new Map();
 
 export function issueOtp(phone) {
-  const otp = isProd ? String(Math.floor(100000 + Math.random() * 900000)) : '123456';
-  store.set(phone, { otp, exp: Date.now() + 5 * 60 * 1000, tries: 0 });
-  // TODO(prod): send via MSG91 / Twilio here. Never log OTPs in production.
-  if (!isProd) console.log(`[OTP] ${phone}: ${otp}`);
-  return isProd ? undefined : otp;
+  const otp = String(
+    isProd ? randomInt(100000, 1000000) : 123456
+  );
+
+  store.set(phone, {
+    otp,
+    exp: Date.now() + 5 * 60 * 1000,
+    tries: 0,
+  });
+
+  // Show OTP locally, or in production only for approved test numbers.
+  const canDisplay =
+    !isProd ||
+    (env.otpTestMode && env.otpTestPhones.includes(phone));
+
+  if (canDisplay) {
+    return otp;
+  }
+
+  // SMS integration can be added here later.
+  return undefined;
 }
+
 export function checkOtp(phone, otp) {
-  const r = store.get(phone);
-  if (!r || r.exp < Date.now()) return false;
-  if (++r.tries > 5) { store.delete(phone); return false; }
-  if (r.otp !== String(otp)) return false;
+  const record = store.get(phone);
+
+  if (!record || record.exp < Date.now()) {
+    store.delete(phone);
+    return false;
+  }
+
+  if (++record.tries > 5) {
+    store.delete(phone);
+    return false;
+  }
+
+  if (record.otp !== String(otp)) {
+    return false;
+  }
+
   store.delete(phone);
   return true;
 }

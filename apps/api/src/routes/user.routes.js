@@ -11,6 +11,26 @@ const offerInclude = { club: { select: { id: true, name: true, area: true, image
 const withPrice = (c) => ({ ...c, startingPrice: c.offers?.length ? Math.min(...c.offers.map((o) => o.price)) : null, offerCount: c.offers?.length || 0, offers: undefined });
 const cityWhere = (city) => (city ? { city: { name: { equals: city, mode: 'insensitive' } } } : {});
 
+
+r.get('/cities/with-clubs', wrap(async (req, res) => {
+  const clubs = await prisma.club.findMany({
+    where: { status: 'ACTIVE' },
+    select: {
+      city: {
+        select: { id: true, name: true },
+      },
+    },
+    distinct: ['cityId'],
+  });
+
+  res.json(
+    clubs
+      .map((club) => club.city)
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  );
+}));
+
 /* ---------- public discovery ---------- */
 r.get('/cities', wrap(async (req, res) => {
   res.json(await prisma.city.findMany({ orderBy: [{ isPopular: 'desc' }, { name: 'asc' }] }));

@@ -65,9 +65,9 @@ export function SearchResults() {
 
 export function Filters() {
   const nav = useNavigate(); const { filters, setFilters } = useStore();
-  const [f, setF] = useState({ date: '', entryType: [], music: [], maxPrice: 5000, ...filters, entryType: filters.entryType?.split(',') || [], music: filters.music?.split(',') || [] });
+  const [f, setF] = useState(() => ({ date: filters.date || '', entryType: filters.entryType?.split(',') || [], music: filters.music?.split(',') || [], maxPrice: filters.maxPrice || 5000 }));
   const toggle = (k, v) => setF((p) => ({ ...p, [k]: p[k].includes(v) ? p[k].filter((x) => x !== v) : [...p[k], v] }));
-  const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const day = (n) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const apply = () => {
     const out = {};
     if (f.date) out.date = f.date;
@@ -80,10 +80,9 @@ export function Filters() {
     <div>
       <Header back title="Filters" right={<button className="text-xs text-brand" onClick={() => { setFilters({}); nav('/explore'); }}>Clear All</button>} />
       <div className="space-y-6 p-4">
-        <div><p className="mb-2 text-xs text-muted">Date</p><div className="flex flex-wrap gap-2">
-          <Chip active={f.date === day(0)} onClick={() => setF({ ...f, date: f.date === day(0) ? '' : day(0) })}>Today</Chip>
-          <Chip active={f.date === day(1)} onClick={() => setF({ ...f, date: f.date === day(1) ? '' : day(1) })}>Tomorrow</Chip>
-          <input type="date" value={f.date} min={day(0)} onChange={(e) => setF({ ...f, date: e.target.value })} className="rounded-lg border border-line bg-card px-2 text-xs" /></div></div>
+        <div><p className="mb-2 text-xs text-muted">Date</p><div className="grid grid-cols-2 gap-2">
+          {[['Today', day(0)], ['Tomorrow', day(1)]].map(([label, value]) => <button key={label} type="button" aria-pressed={f.date === value} onClick={() => setF({ ...f, date: f.date === value ? '' : value })} className={`min-w-0 rounded-xl border px-3 py-3 text-sm font-medium ${f.date === value ? 'border-brand bg-brand text-white' : 'border-line bg-card text-muted'}`}>{label}</button>)}
+          <label className="col-span-2 block min-w-0 text-xs text-muted">Or choose a date<input type="date" value={f.date} min={day(0)} onChange={(e) => setF({ ...f, date: e.target.value })} className="mt-1 block h-11 w-full min-w-0 max-w-full appearance-none rounded-xl border border-line bg-card px-3 text-sm text-fg" /></label></div></div>
         <div><p className="mb-2 text-xs text-muted">Entry Type</p><div className="flex flex-wrap gap-2">{ENTRY_TYPES.map((e) => <Chip key={e} active={f.entryType.includes(e)} onClick={() => toggle('entryType', e)}>{e}</Chip>)}</div></div>
         <div><p className="mb-2 flex justify-between text-xs text-muted"><span>Price Range</span><span>Up to {+f.maxPrice >= 5000 ? '₹5000+' : formatINR(f.maxPrice)}</span></p>
           <input type="range" min="0" max="5000" step="500" value={f.maxPrice} onChange={(e) => setF({ ...f, maxPrice: e.target.value })} className="w-full accent-brand" /></div>

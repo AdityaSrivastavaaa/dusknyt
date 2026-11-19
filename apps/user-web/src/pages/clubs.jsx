@@ -51,7 +51,7 @@ export function EventSelect() {
         const days = [...new Set(list.map((e) => e.date.slice(0, 10)))];
         const day = sel || days[0];
         return (<div className="p-4">
-          <div className="no-scrollbar flex gap-2 overflow-x-auto">{days.map((d) => <Chip key={d} active={d === day} onClick={() => setSel(d)}>{fmtDate(d)}</Chip>)}</div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{days.map((d) => <button key={d} type="button" aria-pressed={d === day} onClick={() => setSel(d)} className={`min-w-0 rounded-xl border px-2 py-2 text-center text-xs ${d === day ? 'border-brand bg-brand text-white' : 'border-line bg-card text-muted'}`}><span className="block truncate font-semibold">{new Date(`${d}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}</span><span className="mt-0.5 block truncate">{fmtDate(d)}</span></button>)}</div>
           <p className="mb-2 mt-5 text-xs text-muted">Events on {fmtDate(day)}</p>
           <div className="space-y-3">{list.filter((e) => e.date.slice(0, 10) === day).map((e) => <button key={e.id} onClick={() => nav(`/clubs/${id}/offers?date=${day}&eventId=${e.id}`)} className="glass-panel w-full overflow-hidden rounded-2xl border border-line text-left">
             <div className="relative grid aspect-[16/8] place-items-end bg-gradient-to-br from-brand-dark to-black">{e.poster && <img src={e.poster} alt={`${e.title} event banner`} className="absolute inset-0 h-full w-full object-cover" />}<div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" /><div className="relative w-full p-3 text-white"><p className="text-lg font-bold">{e.title}</p><p className="text-xs text-white/80">{e.club?.name} · {fmtDate(e.date)} · {e.startTime}</p></div></div>

@@ -70,12 +70,17 @@ export function Profile() {
   if (!user) return <><Header title="Profile" /><LoginPrompt onLogin={() => nav('/login', { state: { from: '/profile' } })} /></>;
   return (
     <div>
-      <Header title="Profile" />
-      <div className="flex items-center gap-3 p-4"><Avatar src={user.avatar} name={user.name} size={56} /><div><p className="font-semibold">{user.name}</p><p className="text-xs text-muted">{user.phone}</p></div></div>
-      <MenuItem to="/guestlists" icon={Heart} label="My Guestlists" /><MenuItem to="/saved" icon={Bookmark} label="Saved Clubs & Offers" />
-      <MenuItem to="/notifications" icon={Bell} label="Notifications" /><MenuItem to="/profile/edit" icon={UserCog} label="Edit Profile" />
-      <MenuItem to="/settings" icon={Cog} label="Settings" /><MenuItem to="/help" icon={HelpCircle} label="Help & Support" />
-      <MenuItem icon={LogOut} label="Logout" onClick={() => { logout(); nav('/login'); }} />
+      <Header title="Profile" sub="Your DUSKNYT account" />
+      <div className="space-y-5 p-4">
+        <Card className="flex min-w-0 items-center gap-3 p-4">
+          <Avatar src={user.avatar} name={user.name} size={60} />
+          <div className="min-w-0 flex-1"><p className="truncate text-base font-semibold">{user.name || 'DUSKNYT Guest'}</p><p className="truncate text-xs text-muted">{user.phone || user.email || 'Guest account'}</p>{user.email && user.phone && <p className="truncate text-xs text-muted">{user.email}</p>}</div>
+          <Link to="/profile/edit" className="shrink-0 rounded-xl border border-line px-3 py-2 text-xs font-semibold text-brand">Edit</Link>
+        </Card>
+        <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Your activity</h2><Card className="overflow-hidden p-0"><MenuItem to="/guestlists" icon={Heart} label="My Bookings" /><MenuItem to="/saved" icon={Bookmark} label="Saved Clubs & Offers" /><MenuItem to="/notifications" icon={Bell} label="Notifications" /></Card></section>
+        <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Account & support</h2><Card className="overflow-hidden p-0"><MenuItem to="/settings" icon={Cog} label="Settings" /><MenuItem to="/help" icon={HelpCircle} label="Help & Support" /></Card></section>
+        <Card className="overflow-hidden p-0"><MenuItem icon={LogOut} label="Log out" onClick={() => { logout(); nav('/login'); }} /></Card>
+      </div>
     </div>
   );
 }

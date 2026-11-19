@@ -24,7 +24,7 @@ export function Login() {
   };
   return (
     <div className="flex min-h-screen flex-col justify-center p-6">
-      <h1 className="text-center text-sm text-muted">Welcome to</h1><Logo className="mb-1 block text-center text-3xl" /><p className="mb-8 text-center text-xs text-muted">Sign in to continue</p>
+      <h1 className="text-center text-sm text-muted">Welcome to</h1><Logo className="mx-auto mb-1 block text-center text-3xl" /><p className="mb-8 text-center text-xs text-muted">Sign in to continue</p>
       <div className="space-y-4">
         <Input label="Mobile number" inputMode="numeric" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} error={err} />
         <Button loading={send.isPending} disabled={phone.replace(/\D/g, '').length < 10} onClick={() => { setErr(''); send.mutate(); }}>Continue</Button>

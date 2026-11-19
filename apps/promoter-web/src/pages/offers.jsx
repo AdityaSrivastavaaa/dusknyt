@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState } from '@dusknyt/ui';
-import { ENTRY_TYPES, OFFER_TYPES, formatINR, fmtDate } from '@dusknyt/shared';
+import { ENTRY_TYPES, OFFER_TYPES, OFFER_INCLUSIONS, formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 
@@ -26,34 +26,41 @@ export function MyOffers() {
 export function CreateOffer() {
   const nav = useNavigate(); const qc = useQueryClient(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
   const clubs = useQuery({ queryKey: ['p-clubs'], queryFn: () => http.get('/promoter/clubs') });
-  const [f, setF] = useState({ clubId: '', eventId: '', entryType: 'Couple', offerType: 'Free Entry', price: 0, entryBefore: '9:00 PM', date: '', inclusions: '', terms: '' });
+  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', entryType: 'Couple', offerType: 'Free Entry', price: 0, entryBefore: '9:00 PM', date: '', inclusions: [], terms: '' });
   const club = clubs.data?.find((c) => c.id === f.clubId);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const create = useMutation({
-    mutationFn: (status) => http.post('/promoter/offers', {
-      ...f, status, eventId: f.eventId || null, price: f.offerType === 'Free Entry' || f.offerType === 'Ladies Night' ? 0 : +f.price,
-      inclusions: f.inclusions.split('\n').map((s) => s.trim()).filter(Boolean),
-    }),
+    mutationFn: async (status) => {
+      const event = await http.post('/promoter/events', { clubId: f.clubId, title: f.eventTitle, djName: f.djName || undefined, date: f.date, startTime: f.startTime, genre: f.genre || undefined });
+      return http.post('/promoter/offers', {
+        ...f, status, eventId: event.id, date: event.date, price: f.offerType === 'Free Entry' || f.offerType === 'Ladies Night' ? 0 : +f.price,
+      });
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['offers'] }); nav('/offers', { replace: true }); },
     onError: (e) => setErr(errMsg(e)),
   });
-  const onClub = (e) => { const c = clubs.data.find((x) => x.id === e.target.value); setF({ ...f, clubId: e.target.value, eventId: '', date: c?.events[0]?.date || '' }); };
-  const onEvent = (e) => { const ev = club.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, date: ev ? ev.date : f.date }); };
+  const onClub = (e) => { setF({ ...f, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', date: '' }); };
+  const onEvent = (e) => { const ev = club?.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', date: ev?.date?.slice(0, 10) || f.date }); };
+  const toggleInclusion = (value) => setF((old) => ({ ...old, inclusions: old.inclusions.includes(value) ? old.inclusions.filter((x) => x !== value) : [...old.inclusions, value] }));
   return (
     <div className="pb-8">
       <Header back title="Create New Offer" sub={`Step ${step} of 2`} />
       <Async q={clubs}>{() => (<div className="space-y-4 p-4">
         {step === 1 ? (<>
           <Select label="Club" value={f.clubId} onChange={onClub} options={[{ value: '', label: 'Select club' }, ...clubs.data.map((c) => ({ value: c.id, label: c.name }))]} />
-          <Select label="Event (optional)" value={f.eventId} onChange={onEvent} options={[{ value: '', label: 'No specific event' }, ...(club?.events || []).map((e) => ({ value: e.id, label: `${e.title} · ${fmtDate(e.date)}` }))]} />
+          <Select label="Use an existing event (optional)" value={f.eventId} onChange={onEvent} options={[{ value: '', label: 'Create event details below' }, ...(club?.events || []).map((e) => ({ value: e.id, label: `${e.title} · ${fmtDate(e.date)}` }))]} />
+          <Input label="Event name" value={f.eventTitle} onChange={set('eventTitle')} placeholder="e.g. Bollywood Night" />
+          <Input label="DJ / performer (optional)" value={f.djName} onChange={set('djName')} />
           <Input label="Event date" type="date" value={f.date.slice(0, 10)} onChange={set('date')} />
+          <Input label="Event start time" value={f.startTime} onChange={set('startTime')} />
+          <Input label="Music / theme (optional)" value={f.genre} onChange={set('genre')} placeholder="e.g. Bollywood" />
           <div><p className="mb-1 text-xs text-muted">Entry type</p><div className="flex flex-wrap gap-2">{ENTRY_TYPES.map((t) => <Chip key={t} active={f.entryType === t} onClick={() => setF({ ...f, entryType: t })}>{t}</Chip>)}</div></div>
           <Select label="Offer type" value={f.offerType} onChange={set('offerType')} options={OFFER_TYPES} />
           {['Cover Charge', 'Stag Entry'].includes(f.offerType) && <Input label="Price (₹)" type="number" min="0" value={f.price} onChange={set('price')} />}
           <Input label="Entry before" value={f.entryBefore} onChange={set('entryBefore')} placeholder="9:30 PM" />
-          <Button disabled={!f.clubId || !f.date} onClick={() => setStep(2)}>Next</Button>
+          <Button disabled={!f.clubId || !f.date || f.eventTitle.trim().length < 2} onClick={() => setStep(2)}>Next</Button>
         </>) : (<>
-          <Textarea label="What's included (one per line)" rows={4} value={f.inclusions} onChange={set('inclusions')} />
+          <fieldset><legend className="mb-2 text-xs text-muted">Select everything included</legend><div className="grid grid-cols-2 gap-2">{OFFER_INCLUSIONS.map((item) => <label key={item} className="flex items-center gap-2 rounded-xl border border-line bg-card p-2 text-xs"><input type="checkbox" checked={f.inclusions.includes(item)} onChange={() => toggleInclusion(item)} className="accent-brand" />{item}</label>)}</div></fieldset>
           <Textarea label="Terms & conditions" rows={4} value={f.terms} onChange={set('terms')} />
           <Card className="text-sm"><p className="font-semibold">{club?.name} · {f.offerType}</p><p className="text-xs text-muted">{f.entryType} · {fmtDate(f.date)} · before {f.entryBefore}</p></Card>
           {err && <p className="text-xs text-bad">{err}</p>}

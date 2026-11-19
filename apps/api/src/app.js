@@ -15,7 +15,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: (o, cb) => cb(null, !o || env.corsOrigins.includes(o)), credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(morgan('tiny'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));

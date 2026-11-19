@@ -14,7 +14,7 @@ export function Splash() {
 export function Login() {
   const nav = useNavigate(); const { state } = useLocation(); const { login, token } = useAuth();
   const [mode, setMode] = useState('password'); const [f, setF] = useState({ phone: '', password: '', otp: '' }); const [sent, setSent] = useState(false); const [err, setErr] = useState('');
-  const done = (d) => { login(d.token, d.user); nav(state?.from || '/', { replace: true }); };
+  const done = (d) => { login(d.token, d.user); nav(d.user.mustChangePassword ? '/password' : (state?.from || '/'), { replace: true }); };
   const m = useMutation({
     mutationFn: async () => {
       if (mode === 'password') return done(await http.post('/auth/promoter/login', { phone: f.phone, password: f.password }));

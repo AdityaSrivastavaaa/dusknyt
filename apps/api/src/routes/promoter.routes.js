@@ -13,18 +13,18 @@ const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
 
 r.get('/dashboard', wrap(async (req, res) => {
   const where = mine(req);
-  const [fresh, confirmed, confirmedRows, events] = await Promise.all([
+  const [fresh, confirmed, events, activeOffers] = await Promise.all([
     prisma.guestRequest.count({ where: { ...where, status: 'PENDING', seenAt: null } }),
     prisma.guestRequest.count({ where: { ...where, status: 'CONFIRMED' } }),
-    prisma.guestRequest.findMany({ where: { ...where, status: 'CONFIRMED' }, include: { offer: { select: { price: true } } } }),
     prisma.offer.findMany({
       where: { promoterId: req.promoter.id, status: 'ACTIVE', date: { gte: startOfDay() } },
       include: { club: { select: { name: true, images: true } }, _count: { select: { requests: true } } }, orderBy: { date: 'asc' }, take: 6,
     }),
+    prisma.offer.count({ where: { promoterId: req.promoter.id, status: 'ACTIVE', date: { gte: startOfDay() } } }),
   ]);
   res.json({
     name: req.user.name || req.promoter.brand, newRequests: fresh, confirmed,
-    earnings: confirmedRows.reduce((s, x) => s + x.offer.price * x.guestCount, 0),
+    activeOffers,
     upcoming: events.map((o) => ({ id: o.id, club: o.club.name, image: o.club.images[0], date: o.date, entryBefore: o.entryBefore, requests: o._count.requests })),
   });
 }));
@@ -33,8 +33,18 @@ r.get('/dashboard', wrap(async (req, res) => {
 r.get('/clubs', wrap(async (req, res) => {
   res.json(await prisma.club.findMany({
     where: { status: 'ACTIVE' }, orderBy: { name: 'asc' },
-    select: { id: true, name: true, area: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, select: { id: true, title: true, date: true, startTime: true } } },
+    select: { id: true, name: true, area: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, select: { id: true, title: true, djName: true, date: true, startTime: true } } },
   }));
+}));
+// Matching event title and club/date reuse one shared event across promoters.
+r.post('/events', wrap(async (req, res) => {
+  const d = parse(z.object({ clubId: z.string(), title: z.string().min(2), djName: z.string().optional(), date: z.string(), startTime: z.string().default('9:00 PM'), genre: z.string().optional() }), req.body);
+  const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
+  if (!club) throw new ApiError(400, 'Select an active club');
+  const date = new Date(d.date), from = startOfDay(date), to = addDays(from, 1);
+  const existing = await prisma.event.findFirst({ where: { clubId: club.id, title: { equals: d.title, mode: 'insensitive' }, date: { gte: from, lt: to } } });
+  if (existing) return res.json(existing);
+  res.status(201).json(await prisma.event.create({ data: { ...d, date, clubId: club.id } }));
 }));
 const offerBody = z.object({
   clubId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
@@ -57,6 +67,7 @@ r.post('/offers', wrap(async (req, res) => {
   const d = parse(offerBody, req.body);
   const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
   if (!club) throw new ApiError(400, 'Invalid club');
+  if (d.eventId && !await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id } })) throw new ApiError(400, 'Event does not belong to the selected club');
   res.status(201).json(await prisma.offer.create({ data: { ...d, date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
 }));
 r.get('/offers/:id', wrap(async (req, res) => {
@@ -120,17 +131,20 @@ r.get('/guestlist/export', wrap(async (req, res) => {
 r.get('/analytics', wrap(async (req, res) => {
   res.json(await analytics(mine(req), req.query.range === 'month' ? 30 : 7));
 }));
-r.get('/profile', wrap(async (req, res) => res.json({ ...publicUser(req.user), promoter: req.promoter })));
+r.get('/profile', wrap(async (req, res) => {
+  const rows = await prisma.offer.findMany({ where: { promoterId: req.promoter.id }, select: { clubId: true, club: { select: { id: true, name: true } } }, distinct: ['clubId'] });
+  res.json({ ...publicUser(req.user), promoter: req.promoter, clubs: rows.map((x) => x.club) });
+}));
 r.put('/profile', wrap(async (req, res) => {
-  const d = parse(z.object({ name: z.string().min(2).optional(), email: z.string().email().optional(), avatar: z.string().url().optional().or(z.literal('')), brand: z.string().min(2).optional() }), req.body);
-  const { brand, ...u } = d;
-  if (brand) await prisma.promoter.update({ where: { id: req.promoter.id }, data: { brand } });
+  const d = parse(z.object({ name: z.string().min(2).optional(), email: z.string().email().optional(), avatar: z.string().url().optional().or(z.literal('')), brand: z.string().min(2).optional(), instagram: z.string().max(100).optional() }), req.body);
+  const { brand, instagram, ...u } = d;
+  if (brand || instagram !== undefined) await prisma.promoter.update({ where: { id: req.promoter.id }, data: { ...(brand && { brand }), ...(instagram !== undefined && { instagram }) } });
   res.json(publicUser(await prisma.user.update({ where: { id: req.user.id }, data: u })));
 }));
 r.post('/change-password', wrap(async (req, res) => {
-  const d = parse(z.object({ current: z.string(), next: z.string().min(8) }), req.body);
-  if (!req.user.passwordHash || !(await bcrypt.compare(d.current, req.user.passwordHash))) throw new ApiError(400, 'Current password is incorrect');
-  await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash: await bcrypt.hash(d.next, 10) } });
+  const d = parse(z.object({ current: z.string().optional(), next: z.string().min(8) }), req.body);
+  if (!req.user.mustChangePassword && (!d.current || !req.user.passwordHash || !(await bcrypt.compare(d.current, req.user.passwordHash)))) throw new ApiError(400, 'Current password is incorrect');
+  await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash: await bcrypt.hash(d.next, 10), mustChangePassword: false } });
   res.json({ ok: true });
 }));
 

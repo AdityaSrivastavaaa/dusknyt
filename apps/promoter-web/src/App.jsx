@@ -1,4 +1,4 @@
-import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Ticket, Inbox, Users, MoreHorizontal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Page, BottomNav, RequireAuth } from '@dusknyt/ui';
@@ -8,6 +8,14 @@ import { Dashboard, Analytics } from './pages/dashboard';
 import { MyOffers, CreateOffer, OfferDetail } from './pages/offers';
 import { Requests, RequestDetails, ReviewRequest, Guestlist } from './pages/requests';
 import { More, EditProfile, ChangePassword, Notifications, Help, About } from './pages/profile';
+import { useAuth } from '@dusknyt/ui';
+
+function PromoterGuard() {
+  const { token, user } = useAuth(); const location = useLocation();
+  if (!token || user?.role !== 'PROMOTER') return <Navigate to="/login" replace />;
+  if (user.mustChangePassword && location.pathname !== '/password') return <Navigate to="/password" replace />;
+  return <Outlet />;
+}
 
 function Main() {
   const q = useQuery({ queryKey: ['requests', 'new'], queryFn: () => http.get('/promoter/requests', { tab: 'new', limit: 1 }), refetchInterval: 30000 });
@@ -19,12 +27,11 @@ function Main() {
 }
 
 export default function App() {
-  const guard = <RequireAuth roles={['PROMOTER']} />;
   return (
     <Routes>
       <Route path="splash" element={<Splash />} />
       <Route path="login" element={<Login />} />
-      <Route element={guard}>
+      <Route element={<PromoterGuard />}>
         <Route element={<Main />}>
           <Route index element={<Dashboard />} />
           <Route path="offers" element={<MyOffers />} />

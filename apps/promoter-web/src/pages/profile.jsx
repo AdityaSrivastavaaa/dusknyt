@@ -18,7 +18,8 @@ export function More() {
   return (
     <div>
       <Header title="Profile" right={<ThemeToggle />} />
-      <div className="flex items-center gap-3 p-4"><Avatar src={user.avatar} name={user.name} size={56} /><div><p className="font-semibold">{q.data?.promoter?.brand || user.name}</p><p className="text-xs text-muted">{user.phone}</p><p className="text-xs text-muted">{user.email}</p></div></div>
+      <div className="flex items-center gap-3 p-4"><Avatar src={user.avatar} name={user.name} size={56} /><div><p className="font-semibold">{q.data?.promoter?.brand || user.name}</p><p className="text-xs text-muted">{user.name} · {user.phone}</p><p className="text-xs text-muted">{q.data?.promoter?.instagram ? `@${q.data.promoter.instagram.replace(/^@/, '')}` : 'Instagram not set'}</p></div></div>
+      {q.data?.clubs?.length > 0 && <div className="px-4 pb-3"><p className="mb-2 text-xs font-semibold text-muted">CLUBS YOU WORK WITH</p><div className="flex flex-wrap gap-2">{q.data.clubs.map((c) => <span key={c.id} className="rounded-lg bg-card px-3 py-1.5 text-xs">{c.name}</span>)}</div></div>}
       <Item to="/analytics" icon={BarChart3} label="Analytics" /><Item to="/profile/edit" icon={UserCog} label="Edit Profile" /><Item to="/password" icon={KeyRound} label="Change Password" />
       <Item to="/notifications" icon={Bell} label="Notification Settings" /><Item to="/help" icon={HelpCircle} label="Help & Support" /><Item to="/about" icon={Info} label="About DUSKNYT" />
       <Item icon={LogOut} danger label="Logout" onClick={() => { logout(); nav('/login'); }} />
@@ -28,22 +29,23 @@ export function More() {
 
 export function EditProfile() {
   const { user, update } = useAuth(); const nav = useNavigate(); const qc = useQueryClient();
-  const [f, setF] = useState({ name: user.name || '', email: user.email || '', brand: '' }); const [err, setErr] = useState('');
+  const profile = useQuery({ queryKey: ['p-profile'], queryFn: () => http.get('/promoter/profile') });
+  const [f, setF] = useState({ name: user.name || '', email: user.email || '', brand: '', instagram: '' }); const [err, setErr] = useState('');
   const save = useMutation({
-    mutationFn: () => http.put('/promoter/profile', { name: f.name, ...(f.email && { email: f.email }), ...(f.brand && { brand: f.brand }) }),
+    mutationFn: () => http.put('/promoter/profile', { name: f.name, ...(f.email && { email: f.email }), brand: f.brand || profile.data?.promoter?.brand, instagram: f.instagram || profile.data?.promoter?.instagram || '' }),
     onSuccess: (u) => { update({ ...user, ...u }); qc.invalidateQueries({ queryKey: ['p-profile'] }); nav(-1); }, onError: (e) => setErr(errMsg(e)),
   });
   return (<div><Header back title="Edit Profile" /><div className="space-y-4 p-4">
     <Input label="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><Input label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
-    <Input label="Brand / company (optional)" value={f.brand} onChange={(e) => setF({ ...f, brand: e.target.value })} />{err && <p className="text-xs text-bad">{err}</p>}
+    <Input label="Brand / company" value={f.brand || profile.data?.promoter?.brand || ''} onChange={(e) => setF({ ...f, brand: e.target.value })} /><Input label="Instagram ID" value={f.instagram || profile.data?.promoter?.instagram || ''} onChange={(e) => setF({ ...f, instagram: e.target.value })} placeholder="@yourhandle" />{err && <p className="text-xs text-bad">{err}</p>}
     <Button loading={save.isPending} onClick={() => save.mutate()}>Save Changes</Button></div></div>);
 }
 
 export function ChangePassword() {
-  const nav = useNavigate(); const [f, setF] = useState({ current: '', next: '' }); const [err, setErr] = useState('');
-  const save = useMutation({ mutationFn: () => http.post('/promoter/change-password', f), onSuccess: () => nav(-1), onError: (e) => setErr(errMsg(e)) });
+  const nav = useNavigate(); const { user, update } = useAuth(); const forced = user?.mustChangePassword; const [f, setF] = useState({ current: '', next: '' }); const [err, setErr] = useState('');
+  const save = useMutation({ mutationFn: () => http.post('/promoter/change-password', { ...(forced ? {} : { current: f.current }), next: f.next }), onSuccess: () => { if (forced) update({ ...user, mustChangePassword: false }); nav('/', { replace: true }); }, onError: (e) => setErr(errMsg(e)) });
   return (<div><Header back title="Change Password" /><div className="space-y-4 p-4">
-    <Input label="Current password" type="password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} /><Input label="New password (min 8)" type="password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} />
+    {forced && <p className="text-sm text-muted">Set a new password before continuing to your promoter account.</p>}{!forced && <Input label="Current password" type="password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />}<Input label="New password (min 8)" type="password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} />
     {err && <p className="text-xs text-bad">{err}</p>}<Button loading={save.isPending} disabled={f.next.length < 8} onClick={() => save.mutate()}>Update Password</Button></div></div>);
 }
 

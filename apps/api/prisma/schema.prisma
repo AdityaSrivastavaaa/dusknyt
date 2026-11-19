@@ -54,6 +54,7 @@ model User {
   phone         String?        @unique
   email         String?        @unique
   passwordHash  String?
+  mustChangePassword Boolean @default(false)
   name          String?
   dob           DateTime?
   avatar        String?
@@ -71,6 +72,7 @@ model Promoter {
   userId    String       @unique
   brand     String
   company   String?
+  instagram String?
   logo      String?
   status    EntityStatus @default(ACTIVE)
   createdAt DateTime     @default(now())

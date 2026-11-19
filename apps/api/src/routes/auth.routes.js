@@ -47,6 +47,7 @@ r.post('/promoter/login', wrap(async (req, res) => {
   const { phone, password } = parse(z.object({ phone: phoneS, password: z.string().min(1) }), req.body);
   const u = await findPromoter(phone);
   if (!u.passwordHash || !(await bcrypt.compare(password, u.passwordHash))) throw new ApiError(401, 'Incorrect phone or password');
+  if (u.mustChangePassword) return res.json(session(u, { mustChangePassword: true }));
   res.json(session(u));
 }));
 r.post('/promoter/send-otp', wrap(async (req, res) => {

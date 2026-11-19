@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, publicUser } from '../lib/http.js';
@@ -73,18 +74,19 @@ r.delete('/events/:id', wrap(async (req, res) => { await prisma.event.delete({ w
 r.get('/promoters', wrap(async (req, res) => {
   const where = req.query.q ? { OR: [{ brand: { contains: req.query.q, mode: 'insensitive' } }, { user: { phone: { contains: req.query.q } } }] } : {};
   const [items, total] = await Promise.all([
-    prisma.promoter.findMany({ where, include: { user: { select: { name: true, phone: true, email: true } }, _count: { select: { offers: true } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }), prisma.promoter.count({ where }),
+    prisma.promoter.findMany({ where, include: { user: { select: { name: true, phone: true, email: true } }, offers: { select: { club: { select: { id: true, name: true } } } }, _count: { select: { offers: true } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }), prisma.promoter.count({ where }),
   ]);
   res.json({ items, total });
 }));
 r.post('/promoters', wrap(async (req, res) => {
-  const d = parse(z.object({ name: z.string().min(2), phone: phoneS, email: z.string().email().optional().or(z.literal('')), brand: z.string().min(2), password: z.string().min(8) }), req.body);
+  const d = parse(z.object({ name: z.string().min(2), phone: phoneS, email: z.string().email().optional().or(z.literal('')), brand: z.string().min(2), instagram: z.string().min(1) }), req.body);
+  const temporaryPassword = `DN${randomBytes(9).toString('base64url')}!`;
   const user = await prisma.user.create({
-    data: { role: 'PROMOTER', name: d.name, phone: d.phone, email: d.email || null, passwordHash: await bcrypt.hash(d.password, 10), promoter: { create: { brand: d.brand, company: d.brand } } },
+    data: { role: 'PROMOTER', name: d.name, phone: d.phone, email: d.email || null, passwordHash: await bcrypt.hash(temporaryPassword, 10), mustChangePassword: true, promoter: { create: { brand: d.brand, company: d.brand, instagram: d.instagram } } },
     include: { promoter: true },
   });
   await logActivity(req.user, `Promoter '${d.brand}' registered`, 'promoter', user.promoter.id);
-  res.status(201).json(publicUser(user));
+  res.status(201).json({ user: publicUser(user), temporaryPassword });
 }));
 r.get('/promoters/:id', wrap(async (req, res) => {
   const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, include: { user: true, offers: { orderBy: { date: 'desc' }, take: 20, include: { club: { select: { name: true } } } }, payouts: { orderBy: { createdAt: 'desc' }, take: 10 } } });
@@ -99,6 +101,13 @@ r.put('/promoters/:id', wrap(async (req, res) => {
   if (d.password) await prisma.user.update({ where: { id: p.userId }, data: { passwordHash: await bcrypt.hash(d.password, 10) } });
   if (d.status) await logActivity(req.user, `Promoter '${p.brand}' set ${d.status.toLowerCase()}`, 'promoter', p.id);
   res.json(p);
+}));
+r.post('/promoters/:id/reset-password', wrap(async (req, res) => {
+  const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+  if (!p) throw new ApiError(404, 'Promoter not found');
+  const temporaryPassword = `DN${randomBytes(9).toString('base64url')}!`;
+  await prisma.user.update({ where: { id: p.userId }, data: { passwordHash: await bcrypt.hash(temporaryPassword, 10), mustChangePassword: true } });
+  res.json({ temporaryPassword });
 }));
 
 /* ----- offers ----- */

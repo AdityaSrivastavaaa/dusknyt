@@ -45,6 +45,22 @@ export function ClubForm() {
   const [f, setF] = useState(null);
   const form = f || (id ? existing.data && { ...existing.data, image: existing.data.images[0] || '', music: existing.data.music } : { cityId: '', name: '', address: '', area: '', phone: '', email: '', dressCode: '', about: '', image: '', music: [] });
   const set = (k) => (e) => setF({ ...form, [k]: e.target.value });
+  const uploadBanner = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setErr('Choose an image file.'); return; }
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onerror = reject; reader.onload = () => {
+          const img = new Image(); img.onerror = reject; img.onload = () => {
+            const scale = Math.min(1, 1800 / img.width, 1200 / img.height); const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', 0.82));
+          }; img.src = reader.result;
+        }; reader.readAsDataURL(file);
+      });
+      setErr(''); setF({ ...form, image: dataUrl });
+    } catch { setErr('Could not read this image. Try another file.'); }
+  };
   const save = useMutation({
     mutationFn: () => {
       const body = { cityId: form.cityId || cities.data[0].id, name: form.name, address: form.address, area: form.area || undefined, phone: form.phone || undefined, email: form.email || '', dressCode: form.dressCode || undefined, about: form.about || undefined, music: form.music, images: form.image ? [form.image] : [] };
@@ -55,7 +71,8 @@ export function ClubForm() {
   if (!form || !cities.data) return <div className="p-6 text-sm text-muted">Loading…</div>;
   return (<div><PageTitle title={id ? 'Edit Club' : 'Add New Club'} />
     <Card className="max-w-xl space-y-4">
-      <Input label="Club image URL" value={form.image} onChange={set('image')} placeholder="https://…" /><Input label="Club name" value={form.name} onChange={set('name')} />
+      <label className="block text-xs text-muted">Club banner (admin managed)<input type="file" accept="image/*" onChange={(e) => uploadBanner(e.target.files?.[0])} className="mt-1 block w-full text-sm" /></label>
+      {form.image && <Img src={form.image} name={form.name || 'Club'} className="h-40 w-full rounded-xl" />}<Input label="Club name" value={form.name} onChange={set('name')} />
       <Input label="Full address" value={form.address} onChange={set('address')} /><Input label="Area" value={form.area || ''} onChange={set('area')} />
       <Select label="City" value={form.cityId || cities.data[0].id} onChange={set('cityId')} options={cities.data.map((c) => ({ value: c.id, label: c.name }))} />
       <Input label="Contact number" value={form.phone || ''} onChange={set('phone')} /><Input label="Email" value={form.email || ''} onChange={set('email')} /><Input label="Dress code" value={form.dressCode || ''} onChange={set('dressCode')} />

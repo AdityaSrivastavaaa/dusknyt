@@ -50,9 +50,8 @@ export function EventSelect() {
         return (<div className="p-4">
           <div className="no-scrollbar flex gap-2 overflow-x-auto">{days.map((d) => <Chip key={d} active={d === day} onClick={() => setSel(d)}>{fmtDate(d)}</Chip>)}</div>
           <p className="mb-2 mt-5 text-xs text-muted">Events on {fmtDate(day)}</p>
-          <div className="space-y-3">{list.filter((e) => e.date.slice(0, 10) === day).map((e) => (
-            <button key={e.id} onClick={() => nav(`/clubs/${id}/offers?eventId=${e.id}`)} className="w-full rounded-2xl border border-line bg-card p-4 text-left">
-              <p className="font-semibold">{e.title}</p><p className="text-xs text-muted">by {e.djName}</p><p className="text-xs text-muted">{e.startTime} Onwards</p></button>))}</div>
+          <div className="space-y-3">{(() => { const events = list.filter((e) => e.date.slice(0, 10) === day); return <button onClick={() => nav(`/clubs/${id}/offers?date=${day}`)} className="w-full rounded-2xl border border-line bg-card p-4 text-left">
+            <p className="font-semibold">{events.length === 1 ? events[0].title : `${events.length} events`}</p><p className="text-xs text-muted">{events.map((e) => [e.title, e.djName].filter(Boolean).join(' · ')).join(' / ')}</p><p className="text-xs text-muted">{events.map((e) => e.startTime).filter((x, i, a) => a.indexOf(x) === i).join(' · ')} Onwards</p></button>; })()}</div>
         </div>);
       }}</Async>
     </div>
@@ -61,7 +60,7 @@ export function EventSelect() {
 
 export function ClubOffers() {
   const { id } = useParams(); const [sp] = useSearchParams(); const [sort, setSort] = useState('recommended');
-  const q = useQuery({ queryKey: ['club-offers', id, sp.get('eventId'), sort], queryFn: () => http.get(`/clubs/${id}/offers`, { eventId: sp.get('eventId') || undefined, sort }) });
+  const q = useQuery({ queryKey: ['club-offers', id, sp.get('eventId'), sp.get('date'), sort], queryFn: () => http.get(`/clubs/${id}/offers`, { eventId: sp.get('eventId') || undefined, date: sp.get('date') || undefined, sort }) });
   return (
     <div>
       <Header back title="Promoter Offers" sub="Compare and pick the best deal" />
@@ -78,7 +77,13 @@ export function AllOffers() {
     <div>
       <Header title="Offers" sub="Best guestlist deals tonight" />
       <div className="flex gap-2 p-4"><Chip active={sort === 'date'} onClick={() => setSort('date')}>Soonest</Chip><Chip active={sort === 'price'} onClick={() => setSort('price')}>Lowest price</Chip></div>
-      <Async q={q} empty={<EmptyState title="No active offers" />}>{(list) => <div className="space-y-3 px-4">{list.map((o) => <OfferCard key={o.id} offer={o} />)}</div>}</Async>
+      <Async q={q} empty={<EmptyState title="No active offers" />}>{(list) => {
+        const groups = [...list.reduce((m, o) => {
+          const date = o.date.slice(0, 10), key = `${o.club.id}:${date}`;
+          const g = m.get(key) || { club: o.club, date, offers: [] }; g.offers.push(o); m.set(key, g); return m;
+        }, new Map()).values()];
+        return <div className="space-y-3 px-4">{groups.map((g) => <Link key={`${g.club.id}:${g.date}`} to={`/clubs/${g.club.id}/offers?date=${g.date}`}><Card className="flex items-center gap-3 p-3"><Img src={g.club.images?.[0]} name={g.club.name} className="h-16 w-16 rounded-xl" /><div className="min-w-0 flex-1"><p className="font-semibold">{g.club.name}</p><p className="text-xs text-muted">{fmtDate(g.date)} · {g.offers.length} promoter offer{g.offers.length === 1 ? '' : 's'}</p><p className="truncate text-xs text-muted">{[...new Set(g.offers.map((o) => o.promoter.brand))].join(' · ')}</p></div><span className="text-xs font-semibold text-brand">{formatINR(Math.min(...g.offers.map((o) => o.price)))}</span></Card></Link>)}</div>;
+      }}</Async>
     </div>
   );
 }

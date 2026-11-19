@@ -67,18 +67,19 @@ r.get('/clubs', wrap(async (req, res) => {
 r.get('/clubs/:id', wrap(async (req, res) => {
   const club = await prisma.club.findFirst({
     where: { id: req.params.id, status: 'ACTIVE' },
-    include: { city: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, take: 20 } },
+    include: { city: true, events: { where: { date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, orderBy: { date: 'asc' }, take: 20 } },
   });
   if (!club) throw new ApiError(404, 'Club not found');
   res.json(club);
 }));
 r.get('/clubs/:id/events', wrap(async (req, res) => {
-  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, date: { gte: startOfDay() } }, orderBy: { date: 'asc' } }));
+  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, orderBy: { date: 'asc' } }));
 }));
 r.get('/clubs/:id/offers', wrap(async (req, res) => {
-  const { eventId, sort } = req.query;
+  const { eventId, date, sort } = req.query;
+  const eventDate = date ? startOfDay(date) : null;
   res.json(await prisma.offer.findMany({
-    where: { clubId: req.params.id, status: 'ACTIVE', ...(eventId && { eventId }) },
+    where: { clubId: req.params.id, status: 'ACTIVE', ...(eventId && { eventId }), ...(eventDate && { date: { gte: eventDate, lt: addDays(eventDate, 1) } }) },
     include: offerInclude, orderBy: sort === 'price' ? { price: 'asc' } : { createdAt: 'desc' },
   }));
 }));

@@ -27,7 +27,7 @@ export function CreateOffer() {
   const nav = useNavigate(); const qc = useQueryClient(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
   const [customPerk, setCustomPerk] = useState('');
   const clubs = useQuery({ queryKey: ['p-clubs'], queryFn: () => http.get('/promoter/clubs') });
-  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', limitedSlots: false, date: '', inclusions: [], terms: '' });
+  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', eventBannerExisting: false, entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', limitedSlots: false, date: '', inclusions: [], terms: '' });
   const club = clubs.data?.find((c) => c.id === f.clubId);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const create = useMutation({
@@ -40,8 +40,8 @@ export function CreateOffer() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['offers'] }); nav('/offers', { replace: true }); },
     onError: (e) => setErr(errMsg(e)),
   });
-  const onClub = (e) => { setF({ ...f, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', date: '' }); };
-  const onEvent = (e) => { const ev = club?.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', genre: ev?.genre || '', eventBanner: ev?.poster || '', date: ev?.date?.slice(0, 10) || f.date }); };
+  const onClub = (e) => { setF({ ...f, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', genre: '', eventBanner: '', eventBannerExisting: false, date: '' }); };
+  const onEvent = (e) => { const ev = club?.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', genre: ev?.genre || '', eventBanner: ev?.poster || '', eventBannerExisting: Boolean(ev?.poster), date: ev?.date?.slice(0, 10) || f.date }); };
   const toggleInclusion = (value) => setF((old) => ({ ...old, inclusions: old.inclusions.includes(value) ? old.inclusions.filter((x) => x !== value) : [...old.inclusions, value] }));
   const toggleEntryType = (value) => setF((old) => ({ ...old, entryTypes: old.entryTypes.includes(value) ? old.entryTypes.filter((x) => x !== value) : [...old.entryTypes, value] }));
   const addCustomPerk = () => {
@@ -73,7 +73,7 @@ export function CreateOffer() {
           <Input label="Event date" type="date" value={f.date.slice(0, 10)} onChange={set('date')} />
           <Input label="Event start time" value={f.startTime} onChange={set('startTime')} />
           <Input label="Music / theme (optional)" value={f.genre} onChange={set('genre')} placeholder="e.g. Bollywood" />
-          <div className="space-y-2"><label className="block text-xs text-muted">Event banner (optional)<input type="file" accept="image/*" onChange={(e) => uploadEventBanner(e.target.files?.[0])} className="mt-1 block w-full text-sm" /></label>{f.eventBanner && <><img src={f.eventBanner} alt="Event banner preview" className="h-40 w-full rounded-xl object-cover" /><button type="button" onClick={() => setF((old) => ({ ...old, eventBanner: '' }))} className="text-xs text-bad">Remove banner</button></>}</div>
+          <div className="space-y-2"><label className="block text-xs text-muted">Event banner (optional){f.eventBannerExisting ? <span className="mt-1 block text-[11px] text-muted">This shared event already has a banner, visible on all promoter offers.</span> : <input type="file" accept="image/*" onChange={(e) => uploadEventBanner(e.target.files?.[0])} className="mt-1 block w-full text-sm" />}</label>{f.eventBanner && <><img src={f.eventBanner} alt="Event banner preview" className="h-40 w-full rounded-xl object-cover" />{!f.eventBannerExisting && <button type="button" onClick={() => setF((old) => ({ ...old, eventBanner: '' }))} className="text-xs text-bad">Remove banner</button>}</>}</div>
           <fieldset><legend className="mb-2 text-xs text-muted">Who is this offer for? Select all that apply</legend><div className="flex flex-wrap gap-2">{ENTRY_TYPES.map((t) => <label key={t} className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-xs"><input type="checkbox" checked={f.entryTypes.includes(t)} onChange={() => toggleEntryType(t)} className="accent-brand" />{t}</label>)}</div></fieldset>
           <Select label="Offer type" value={f.offerType} onChange={set('offerType')} options={OFFER_TYPES} />
           {['Cover Charge', 'Stag Entry'].includes(f.offerType) && <Input label="Price (₹)" type="number" min="0" value={f.price} onChange={set('price')} />}

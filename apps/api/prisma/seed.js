@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import QRCode from 'qrcode';
 
 const prisma = new PrismaClient();
 const hash = (p) => bcrypt.hashSync(p, 10);
@@ -18,11 +19,18 @@ async function main() {
   for (const [i, name] of names.entries()) cities[name] = await prisma.city.create({ data: { name, isPopular: i < 6 } });
 
   await prisma.user.create({ data: { role: 'SUPER_ADMIN', email: 'admin@dusknyt.com', name: 'Super Admin', passwordHash: hash('Admin@123') } });
-  const mkPromoter = (brand, phone, name) => prisma.user.create({
-    data: { role: 'PROMOTER', phone, name, passwordHash: hash('Promo@123'), promoter: { create: { brand, company: brand } } }, include: { promoter: true },
+  const mkPromoter = (brand, phone, name, instagram) => prisma.user.create({
+    data: { role: 'PROMOTER', phone, name, passwordHash: hash('Promo@123'), promoter: { create: { brand, company: brand, instagram } } }, include: { promoter: true },
   });
-  const aarav = (await mkPromoter('Aarav Promotions', '+919876543210', 'Aarav Sharma')).promoter;
-  const rohan = (await mkPromoter('Rohan Nights', '+919876500001', 'Rohan Mehta')).promoter;
+  const aarav = (await mkPromoter('Aarav Promotions', '+919876543210', 'Aarav Sharma', '@aaravpromotions')).promoter;
+  const rohan = (await mkPromoter('Rohan Nights', '+919876500001', 'Rohan Mehta', '@rohannights')).promoter;
+  const promoters = [
+    aarav,
+    rohan,
+    (await mkPromoter('Neha Guestlists', '+919876500002', 'Neha Kapoor', '@nehaguestlists')).promoter,
+    (await mkPromoter('Vikram Social', '+919876500003', 'Vikram Singh', '@vikramsocial')).promoter,
+    (await mkPromoter('Maya Nights', '+919876500004', 'Maya Khanna', '@mayanights')).promoter,
+  ];
   const demoUser = await prisma.user.create({ data: { role: 'USER', phone: '+919999999999', name: 'Aditya Verma', email: 'aditya@email.com' } });
 
   const clubData = [
@@ -54,15 +62,31 @@ async function main() {
       terms: 'Valid for couples only. Entry before the stated time. Dress code applies. Right of admission reserved.', ...extra,
     },
   });
-  const offers = [
-    await mkOffer(0, 0, aarav, 'Free Entry', 'Couple', 0, '9:00 PM', day(0)),
-    await mkOffer(0, 0, rohan, 'Cover Charge', 'Couple', 1000, '11:00 PM', day(0)),
-    await mkOffer(0, 0, aarav, 'Stag Entry', 'Stag', 1500, '10:00 PM', day(0)),
-    await mkOffer(1, 2, aarav, 'Cover Charge', 'Couple', 1000, '10:00 PM', day(1)),
-    await mkOffer(2, 4, rohan, 'Ladies Night', 'Ladies', 0, '9:00 PM', day(2)),
-    await mkOffer(3, 6, aarav, 'Stag Entry', 'Stag', 1500, '8:00 PM', day(3)),
-    await mkOffer(4, 8, rohan, 'Free Entry', 'Group', 0, '9:30 PM', day(1)),
+  const offers = [];
+  const offerVariants = [
+    { type: 'Free Entry', entry: 'Couple', price: 0, before: '10:30 PM', types: ['Couple'] },
+    { type: 'Cover Charge', entry: 'Couple', price: 1000, before: '11:30 PM', types: ['Couple'] },
+    { type: 'Ladies Night', entry: 'Ladies', price: 0, before: '11:00 PM', types: ['Ladies'] },
+    { type: 'Stag Entry', entry: 'Stag', price: 1500, before: '10:00 PM', types: ['Stag'] },
+    { type: 'Free Entry', entry: 'Group', price: 0, before: '10:45 PM', types: ['Couple', 'Ladies'] },
   ];
+  // Every club has multiple upcoming dates, and every event/date has offers from all promoters.
+  for (let clubIndex = 0; clubIndex < clubs.length; clubIndex++) {
+    for (let eventOffset = 0; eventOffset < 2; eventOffset++) {
+      const eventIndex = clubIndex * 2 + eventOffset;
+      const eventDate = events[eventIndex].date;
+      for (let promoterIndex = 0; promoterIndex < promoters.length; promoterIndex++) {
+        const v = offerVariants[promoterIndex];
+        offers.push(await mkOffer(clubIndex, eventIndex, promoters[promoterIndex], v.type, v.types.join(', '), v.price, v.before, eventDate, {
+          entryTypes: v.types,
+          entryType: v.types.join(', '),
+          entryFrom: '9:00 PM',
+          inclusions: promoterIndex % 2 === 0 ? ['Priority entry', 'Welcome drink', 'Dedicated guestlist counter'] : ['Complimentary entry', 'Skip the line', 'Table access subject to availability'],
+          terms: `Offer by ${promoters[promoterIndex].brand}. Valid for ${v.types.join(' and ')} before ${v.before}. Venue dress code applies.`,
+        }));
+      }
+    }
+  }
 
   const mkReq = (offer, status, n, extra = {}) => prisma.guestRequest.create({
     data: {
@@ -71,8 +95,17 @@ async function main() {
     },
   });
   await mkReq(offers[0], 'PENDING', 2);
-  await mkReq(offers[3], 'PENDING', 4);
-  await mkReq(offers[5], 'REJECTED', 3, { rejectReason: 'Capacity Full' });
+  await mkReq(offers[6], 'PENDING', 4);
+  await mkReq(offers[12], 'REJECTED', 3, { rejectReason: 'Capacity Full' });
+  const confirmed = await mkReq(offers[1], 'CONFIRMED', 2);
+  await prisma.guestRequest.update({
+    where: { id: confirmed.id },
+    data: { qrCode: await QRCode.toDataURL(JSON.stringify({ code: confirmed.code, id: confirmed.id }), { margin: 1, width: 280 }) },
+  });
+  await prisma.saved.createMany({ data: [
+    { userId: demoUser.id, clubId: clubs[2].id },
+    { userId: demoUser.id, offerId: offers[1].id },
+  ] });
   await prisma.notification.create({ data: { userId: demoUser.id, title: 'Welcome to DUSKNYT', body: 'Pick a club and request your guestlist entry.' } });
 
   await prisma.payout.createMany({ data: [
@@ -89,6 +122,6 @@ async function main() {
     { key: 'general', value: { appName: 'DUSKNYT', supportEmail: 'support@dusknyt.com', requestExpiryHours: 24 } },
     { key: 'notifications', value: { email: true, push: true } },
   ] });
-  console.log('Seeded.\n  Admin:    admin@dusknyt.com / Admin@123\n  Promoter: 9876543210 / Promo@123  (OTP in dev: 123456)\n  User:     9999999999 (OTP in dev: 123456)');
+  console.log('Seeded.\n  Admin:      admin@dusknyt.com / Admin@123\n  Promoters:  9876543210, 9876500001, 9876500002, 9876500003, 9876500004 / Promo@123\n  Guest:      9999999999 (OTP in dev: 123456)\n  Fixture:    5 clubs, 10 events, 50 offers (5 promoters per event/date), pending/confirmed/rejected requests, QR pass, and saved club/offer.');
 }
 main().finally(() => prisma.$disconnect());

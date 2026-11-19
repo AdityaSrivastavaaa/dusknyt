@@ -38,12 +38,17 @@ export function Login() {
 
 export function Verify() {
   const nav = useNavigate(); const { state } = useLocation(); const { login } = useAuth();
-  const [digits, setDigits] = useState(Array(6).fill('')); const [err, setErr] = useState(''); const [left, setLeft] = useState(25);
+  const [digits, setDigits] = useState(Array(6).fill('')); const [err, setErr] = useState(''); const [left, setLeft] = useState(25); const [testOtp, setTestOtp] = useState(state?.devOtp || '');
   const refs = useRef([]);
   useEffect(() => { if (left <= 0) return; const t = setTimeout(() => setLeft(left - 1), 1000); return () => clearTimeout(t); }, [left]);
   const verify = useMutation({
     mutationFn: () => http.post('/auth/user/verify-otp', { phone: state.phone, otp: digits.join('') }),
     onSuccess: (d) => { login(d.token, d.user); nav(d.isNew ? '/setup' : state.from || '/', { replace: true, state: { from: state.from } }); },
+    onError: (e) => setErr(errMsg(e)),
+  });
+  const resend = useMutation({
+    mutationFn: () => http.post('/auth/user/send-otp', { phone: state.phone }),
+    onSuccess: (d) => { setTestOtp(d.devOtp || ''); setDigits(Array(6).fill('')); setLeft(25); setErr(''); refs.current[0]?.focus(); },
     onError: (e) => setErr(errMsg(e)),
   });
   if (!state?.phone) return <Navigate to="/login" replace />;
@@ -56,14 +61,14 @@ export function Verify() {
     <div className="p-6">
       <Header back title="Verify your number" />
       <p className="mt-6 text-center text-sm text-muted">We have sent a 6-digit code to<br /><b className="text-fg">{state.phone}</b></p>
-      {state.devOtp && <p className="mt-2 text-center text-xs text-warn">Dev OTP: {state.devOtp}</p>}
+      {testOtp && <p className="mt-2 text-center text-sm text-warn">Test OTP: <b>{testOtp}</b></p>}
       <div className="my-6 flex justify-center gap-2">{digits.map((d, i) => (
         <input key={i} ref={(el) => (refs.current[i] = el)} value={d} inputMode="numeric" maxLength={1} onChange={(e) => set(i, e.target.value)}
           onKeyDown={(e) => e.key === 'Backspace' && !d && i > 0 && refs.current[i - 1]?.focus()}
           className="h-12 w-11 rounded-xl border border-line bg-card text-center text-lg outline-none focus:border-brand" />))}</div>
       {err && <p className="mb-3 text-center text-xs text-bad">{err}</p>}
       <Button loading={verify.isPending} disabled={digits.join('').length < 6} onClick={() => { setErr(''); verify.mutate(); }}>Verify</Button>
-      <p className="mt-4 text-center text-xs text-muted">{left > 0 ? `Resend OTP in 00:${String(left).padStart(2, '0')}` : <button className="text-brand" onClick={() => { http.post('/auth/user/send-otp', { phone: state.phone }); setLeft(25); }}>Resend OTP</button>}</p>
+      <p className="mt-4 text-center text-xs text-muted">{left > 0 ? `Resend OTP in 00:${String(left).padStart(2, '0')}` : <button className="text-brand disabled:opacity-50" disabled={resend.isPending} onClick={() => resend.mutate()}>{resend.isPending ? 'Sending…' : 'Resend OTP'}</button>}</p>
       <button className="mx-auto mt-3 block text-xs text-brand" onClick={() => nav('/login', { replace: true })}>Change Number</button>
     </div>
   );

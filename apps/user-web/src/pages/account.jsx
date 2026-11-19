@@ -9,8 +9,10 @@ import { http } from '../lib/api';
 import { ClubCard, OfferCard } from '../components';
 
 export function Saved() {
+  const { token } = useAuth(); const nav = useNavigate();
   const [tab, setTab] = useState('clubs');
-  const q = useQuery({ queryKey: ['saved', tab], queryFn: () => http.get('/saved', { type: tab }) });
+  const q = useQuery({ queryKey: ['saved', tab], queryFn: () => http.get('/saved', { type: tab }), enabled: !!token });
+  if (!token) return <><Header title="Saved" sub="Your saved clubs & offers" /><LoginPrompt onLogin={() => nav('/login', { state: { from: '/saved' } })} /></>;
   return (
     <div>
       <Header title="Saved" sub="Your saved clubs & offers" />
@@ -58,8 +60,13 @@ const MenuItem = ({ to, icon: Icon, label, onClick }) => {
   return <C to={to} onClick={onClick} className="flex w-full items-center gap-3 border-b border-line px-4 py-3.5 text-sm"><Icon size={18} className="text-muted" /><span className="flex-1 text-left">{label}</span><ChevronRight size={16} className="text-muted" /></C>;
 };
 
+function LoginPrompt({ onLogin }) {
+  return <div className="p-5"><Card className="text-center"><h2 className="font-semibold">Please log in</h2><p className="mt-2 text-sm text-muted">Log in to view your account and saved items.</p><Button className="mt-4" onClick={onLogin}>Log in</Button></Card></div>;
+}
+
 export function Profile() {
   const { user, logout } = useAuth(); const nav = useNavigate();
+  if (!user) return <><Header title="Profile" /><LoginPrompt onLogin={() => nav('/login', { state: { from: '/profile' } })} /></>;
   return (
     <div>
       <Header title="Profile" />

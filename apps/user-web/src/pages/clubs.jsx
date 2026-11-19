@@ -6,7 +6,7 @@ import { Async, Header, Button, Img, Chip, Card, EmptyState, Select, useAuth } f
 import { formatINR, fmtDate } from '@dusknyt/shared';
 import { http } from '../lib/api';
 import { useStore } from '../store';
-import { SaveButton, OfferCard } from '../components';
+import { SaveButton } from '../components';
 
 export function ClubDetails() {
   const { id } = useParams(); const nav = useNavigate();
@@ -59,13 +59,30 @@ export function EventSelect() {
 }
 
 export function ClubOffers() {
-  const { id } = useParams(); const [sp] = useSearchParams(); const [sort, setSort] = useState('recommended');
+  const { id } = useParams(); const [sp] = useSearchParams(); const [sort, setSort] = useState('recommended'); const [expanded, setExpanded] = useState([]);
+  const { token, user } = useAuth(); const setDraft = useStore((s) => s.setDraft); const nav = useNavigate();
   const q = useQuery({ queryKey: ['club-offers', id, sp.get('eventId'), sp.get('date'), sort], queryFn: () => http.get(`/clubs/${id}/offers`, { eventId: sp.get('eventId') || undefined, date: sp.get('date') || undefined, sort }) });
+  const book = (offer) => {
+    setDraft({ offer, guests: [], note: '' });
+    if (!token) return nav('/login', { state: { from: '/book/guests' } });
+    nav(user?.name ? '/book/guests' : '/setup', { state: { from: '/book/guests' } });
+  };
   return (
     <div>
-      <Header back title="Promoter Offers" sub="Compare and pick the best deal" />
+      <Header back title="Offers at this club" sub={sp.get('date') ? `${fmtDate(sp.get('date'))} · Expand offers to compare` : 'Expand offers to compare'} />
       <div className="p-4"><Select label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} options={[{ value: 'recommended', label: 'Recommended' }, { value: 'price', label: 'Price: low to high' }]} /></div>
-      <Async q={q} empty={<EmptyState title="No offers available" text="Promoters haven't listed offers for this event yet." />}>{(list) => <div className="space-y-3 px-4 pb-6">{list.map((o) => <OfferCard key={o.id} offer={o} />)}</div>}</Async>
+      <Async q={q} empty={<EmptyState title="No offers available" text="Promoters haven't listed offers for this event yet." />}>{(list) => <div className="space-y-3 px-4 pb-6">{list.map((o) => {
+        const open = expanded.includes(o.id);
+        return <Card key={o.id} className="overflow-hidden p-0"><button type="button" aria-expanded={open} onClick={() => setExpanded((old) => open ? old.filter((x) => x !== o.id) : [...old, o.id])} className="flex w-full items-center gap-3 p-4 text-left">
+          <Img src={o.club.images?.[0]} name={o.club.name} className="h-14 w-14 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1"><p className="text-xs text-muted">{o.promoter.brand}</p><p className="font-semibold">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p>{o.event?.title && <p className="truncate text-xs text-muted">{o.event.title}{o.event.startTime ? ` · ${o.event.startTime}` : ''}</p>}<p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></div>
+          <div className="text-right"><p className="font-bold">{formatINR(o.price)}</p><p className="text-xs text-brand">{open ? 'Hide' : 'Details'}</p></div>
+        </button>{open && <div className="space-y-3 border-t border-line p-4">
+          {o.inclusions?.length > 0 && <div><p className="mb-1 text-xs font-semibold text-muted">Included perks</p><ul className="space-y-1 text-sm">{o.inclusions.map((perk) => <li key={perk} className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-ok" />{perk}</li>)}</ul></div>}
+          {o.terms && <div><p className="mb-1 text-xs font-semibold text-muted">Terms</p><p className="text-sm text-muted">{o.terms}</p></div>}
+          <Button onClick={() => book(o)}>Get Guestlist Entry</Button>
+        </div>}</Card>;
+      })}</div>}</Async>
     </div>
   );
 }

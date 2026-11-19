@@ -7,7 +7,7 @@ import { createRequest } from '../services/guestlist.js';
 
 const r = Router();
 const auth = [authenticate, authorize('USER')];
-const offerInclude = { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, logo: true } } };
+const offerInclude = { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true } } };
 const withPrice = (c) => ({ ...c, startingPrice: c.offers?.length ? Math.min(...c.offers.map((o) => o.price)) : null, offerCount: c.offers?.length || 0, offers: undefined });
 const cityWhere = (city) => (city ? { city: { name: { equals: city, mode: 'insensitive' } } } : {});
 

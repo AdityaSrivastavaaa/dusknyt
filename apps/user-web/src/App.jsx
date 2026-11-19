@@ -22,10 +22,8 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="explore" element={<Explore />} />
         <Route path="offers" element={<AllOffers />} />
-        <Route element={<RequireAuth />}>
-          <Route path="saved" element={<Saved />} />
-          <Route path="profile" element={<Profile />} />
-        </Route>
+        <Route path="saved" element={<Saved />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
       <Route element={<Plain />}>
         <Route path="splash" element={<Splash />} />

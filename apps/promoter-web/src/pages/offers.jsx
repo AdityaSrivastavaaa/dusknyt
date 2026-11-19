@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState } from '@dusknyt/ui';
-import { ENTRY_TYPES, OFFER_TYPES, OFFER_INCLUSIONS, formatINR, fmtDate } from '@dusknyt/shared';
+import { ENTRY_TYPES, OFFER_TYPES, OFFER_PERK_GROUPS, formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 
@@ -25,6 +25,7 @@ export function MyOffers() {
 
 export function CreateOffer() {
   const nav = useNavigate(); const qc = useQueryClient(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
+  const [customPerk, setCustomPerk] = useState('');
   const clubs = useQuery({ queryKey: ['p-clubs'], queryFn: () => http.get('/promoter/clubs') });
   const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', limitedSlots: false, date: '', inclusions: [], terms: '' });
   const club = clubs.data?.find((c) => c.id === f.clubId);
@@ -43,6 +44,11 @@ export function CreateOffer() {
   const onEvent = (e) => { const ev = club?.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', date: ev?.date?.slice(0, 10) || f.date }); };
   const toggleInclusion = (value) => setF((old) => ({ ...old, inclusions: old.inclusions.includes(value) ? old.inclusions.filter((x) => x !== value) : [...old.inclusions, value] }));
   const toggleEntryType = (value) => setF((old) => ({ ...old, entryTypes: old.entryTypes.includes(value) ? old.entryTypes.filter((x) => x !== value) : [...old.entryTypes, value] }));
+  const addCustomPerk = () => {
+    const perk = customPerk.trim();
+    if (!perk || f.inclusions.some((x) => x.toLowerCase() === perk.toLowerCase())) return;
+    setF((old) => ({ ...old, inclusions: [...old.inclusions, perk] })); setCustomPerk('');
+  };
   return (
     <div className="pb-8">
       <Header back title="Create New Offer" sub={`Step ${step} of 2`} />
@@ -62,7 +68,11 @@ export function CreateOffer() {
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.limitedSlots} onChange={(e) => setF({ ...f, limitedSlots: e.target.checked })} className="accent-brand" />Limited slots</label>
           <Button disabled={!f.clubId || !f.date || !f.entryTypes.length || f.eventTitle.trim().length < 2} onClick={() => setStep(2)}>Next</Button>
         </>) : (<>
-          <fieldset><legend className="mb-2 text-xs text-muted">Select everything included</legend><div className="grid grid-cols-2 gap-2">{OFFER_INCLUSIONS.map((item) => <label key={item} className="flex items-center gap-2 rounded-xl border border-line bg-card p-2 text-xs"><input type="checkbox" checked={f.inclusions.includes(item)} onChange={() => toggleInclusion(item)} className="accent-brand" />{item}</label>)}</div></fieldset>
+          <div className="space-y-4"><div><h2 className="font-semibold">Offer perks</h2><p className="text-xs text-muted">Select every perk this offer includes. Add a custom perk if needed.</p></div>
+            {OFFER_PERK_GROUPS.map((group) => <fieldset key={group.label}><legend className="mb-2 text-xs font-semibold text-muted">{group.label}</legend><div className="grid grid-cols-2 gap-2">{group.options.map((item) => <label key={item} className="flex items-center gap-2 rounded-xl border border-line bg-card p-2 text-xs"><input type="checkbox" checked={f.inclusions.includes(item)} onChange={() => toggleInclusion(item)} className="accent-brand" />{item}</label>)}</div></fieldset>)}
+            <div><label className="block text-xs text-muted">Add another perk<input maxLength={60} value={customPerk} onChange={(e) => setCustomPerk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomPerk(); } }} placeholder="e.g. Free entry to after-party" className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-fg outline-none focus:border-brand" /></label><Button type="button" variant="outline" className="mt-2" disabled={!customPerk.trim()} onClick={addCustomPerk}>Add perk</Button></div>
+            {f.inclusions.length > 0 && <div className="rounded-xl border border-line p-3"><p className="mb-2 text-xs font-semibold text-muted">Selected perks</p><div className="flex flex-wrap gap-2">{f.inclusions.map((perk) => <button type="button" key={perk} onClick={() => toggleInclusion(perk)} className="rounded-full bg-brand/15 px-3 py-1 text-xs text-brand">{perk} ×</button>)}</div></div>}
+          </div>
           <Textarea label="Terms & conditions" rows={4} value={f.terms} onChange={set('terms')} />
           <Card className="text-sm"><p className="font-semibold">{club?.name} · {f.eventTitle} · {f.offerType}</p><p className="text-xs text-muted">{f.entryTypes.join(' & ')} · {fmtDate(f.date)} · {f.entryFrom}–{f.entryBefore}{f.limitedSlots ? ' · Limited slots' : ''}</p></Card>
           {err && <p className="text-xs text-bad">{err}</p>}

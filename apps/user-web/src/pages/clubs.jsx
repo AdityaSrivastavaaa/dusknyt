@@ -14,7 +14,7 @@ export function ClubDetails() {
   return (
     <div className="pb-24">
       <Async q={q}>{(c) => (<>
-        <div className="relative"><Img src={c.images[0]} name={c.name} className="h-56 w-full" />
+        <div className="relative"><Img src={c.images?.[0]} name={c.name} className="h-56 w-full" />
           <button onClick={() => nav(-1)} className="absolute left-3 top-3 rounded-full bg-black/50 px-3 py-1 text-white">‹</button></div>
         <div className="space-y-4 p-4">
           <div className="flex items-start justify-between"><div><h1 className="text-xl font-bold">{c.name}</h1><p className="text-xs text-muted">{c.address}</p></div>
@@ -28,10 +28,10 @@ export function ClubDetails() {
           {c.about && <div><h3 className="mb-1 text-sm font-semibold">About</h3><p className="text-sm text-muted">{c.about}</p></div>}
           <div className="flex justify-between text-sm"><span className="text-muted">Music</span><span>{c.music.join(' · ') || '—'}</span></div>
           <div className="flex justify-between text-sm"><span className="text-muted">Dress code</span><span>{c.dressCode || '—'}</span></div>
-          {c.events.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Upcoming events</h3><div className="space-y-2">{c.events.slice(0, 3).map((e) => (
+          {c.events?.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Upcoming events</h3><div className="space-y-2">{c.events.slice(0, 3).map((e) => (
             <Card key={e.id} className="flex justify-between p-3 text-sm"><div><p className="font-medium">{e.title}</p><p className="text-xs text-muted">{e.djName}</p></div><p className="text-xs text-muted">{fmtDate(e.date)}<br />{e.startTime}</p></Card>))}</div></div>}
         </div>
-        <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-line bg-bg p-4"><Button onClick={() => nav(`/clubs/${c.id}/events`)}>View Offers</Button></div>
+        <div className="glass-bar fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md border-t border-line p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"><Button onClick={() => nav(`/clubs/${c.id}/offers`)}>Compare Offers</Button></div>
       </>)}</Async>
     </div>
   );
@@ -69,20 +69,23 @@ export function ClubOffers() {
   };
   return (
     <div>
-      <Header back title="Offers at this club" sub={sp.get('date') ? `${fmtDate(sp.get('date'))} · Expand offers to compare` : 'Expand offers to compare'} />
+      <Header back title="Offers at this club" sub={sp.get('date') ? `${fmtDate(sp.get('date'))} · Compare promoter offers` : 'Compare promoter offers by date'} />
       <div className="p-4"><Select label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} options={[{ value: 'recommended', label: 'Recommended' }, { value: 'price', label: 'Price: low to high' }]} /></div>
-      <Async q={q} empty={<EmptyState title="No offers available" text="Promoters haven't listed offers for this event yet." />}>{(list) => <div className="space-y-3 px-4 pb-6">{list.map((o) => {
-        const open = expanded.includes(o.id);
-        return <Card key={o.id} className="overflow-hidden p-0"><button type="button" aria-expanded={open} onClick={() => setExpanded((old) => open ? old.filter((x) => x !== o.id) : [...old, o.id])} className="flex w-full items-center gap-3 p-4 text-left">
-          <Img src={o.club.images?.[0]} name={o.club.name} className="h-14 w-14 shrink-0 rounded-xl" />
-          <div className="min-w-0 flex-1"><p className="text-xs text-muted">{o.promoter.brand}</p><p className="font-semibold">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p>{o.event?.title && <p className="truncate text-xs text-muted">{o.event.title}{o.event.startTime ? ` · ${o.event.startTime}` : ''}</p>}<p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></div>
-          <div className="text-right"><p className="font-bold">{formatINR(o.price)}</p><p className="text-xs text-brand">{open ? 'Hide' : 'Details'}</p></div>
-        </button>{open && <div className="space-y-3 border-t border-line p-4">
-          {o.inclusions?.length > 0 && <div><p className="mb-1 text-xs font-semibold text-muted">Included perks</p><ul className="space-y-1 text-sm">{o.inclusions.map((perk) => <li key={perk} className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-ok" />{perk}</li>)}</ul></div>}
-          {o.terms && <div><p className="mb-1 text-xs font-semibold text-muted">Terms</p><p className="text-sm text-muted">{o.terms}</p></div>}
-          <Button onClick={() => book(o)}>Get Guestlist Entry</Button>
-        </div>}</Card>;
-      })}</div>}</Async>
+      <Async q={q} empty={<EmptyState title="No offers available" text="Promoters haven't listed offers for this event yet." />}>{(list) => {
+        const groups = [...list.reduce((map, offer) => { const date = offer.date.slice(0, 10); const group = map.get(date) || []; group.push(offer); map.set(date, group); return map; }, new Map()).entries()];
+        return <div className="space-y-6 px-4 pb-6">{groups.map(([date, offers]) => <section key={date} className="space-y-3"><h2 className="px-1 text-sm font-semibold text-muted">{fmtDate(date)} <span className="font-normal">· {offers.length} offer{offers.length === 1 ? '' : 's'}</span></h2>{offers.map((o) => {
+          const open = expanded.includes(o.id);
+          return <Card key={o.id} className="overflow-hidden p-0"><button type="button" aria-expanded={open} onClick={() => setExpanded((old) => open ? old.filter((x) => x !== o.id) : [...old, o.id])} className="flex w-full items-center gap-3 p-4 text-left">
+            <Img src={o.club.images?.[0]} name={o.club.name} className="h-14 w-14 shrink-0 rounded-xl" />
+            <div className="min-w-0 flex-1"><p className="text-xs text-muted">{o.promoter.brand}</p><p className="font-semibold">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p>{o.event?.title && <p className="truncate text-xs text-muted">{o.event.title}{o.event.startTime ? ` · ${o.event.startTime}` : ''}</p>}<p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></div>
+            <div className="text-right"><p className="font-bold">{formatINR(o.price)}</p><p className="text-xs text-brand">{open ? 'Hide' : 'Details'}</p></div>
+          </button>{open && <div className="space-y-3 border-t border-line p-4">
+            {o.inclusions?.length > 0 && <div><p className="mb-1 text-xs font-semibold text-muted">Included perks</p><ul className="space-y-1 text-sm">{o.inclusions.map((perk) => <li key={perk} className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-ok" />{perk}</li>)}</ul></div>}
+            {o.terms && <div><p className="mb-1 text-xs font-semibold text-muted">Terms</p><p className="text-sm text-muted">{o.terms}</p></div>}
+            <Button onClick={() => book(o)}>Get Guestlist Entry</Button>
+          </div>}</Card>;
+        })}</section>)}</div>;
+      }}</Async>
     </div>
   );
 }
@@ -122,7 +125,7 @@ export function OfferDetails() {
           <p className="font-semibold text-brand">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="mt-1 text-xs text-muted">{fmtDate(o.date)} · Entry {o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></Card>
         {o.inclusions.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">What's Included</h3><ul className="space-y-1.5 text-sm text-muted">{o.inclusions.map((x) => <li key={x} className="flex gap-2"><Check size={14} className="mt-0.5 text-ok" />{x}</li>)}</ul></div>}
         {o.terms && <div><h3 className="mb-2 text-sm font-semibold">Terms & Conditions</h3><p className="text-xs text-muted">{o.terms}</p></div>}
-        <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-line bg-bg p-4"><Button onClick={() => go(o)}>Get Guestlist Entry</Button></div>
+      <div className="glass-bar safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md border-t border-line p-4"><Button onClick={() => go(o)}>Get Guestlist Entry</Button></div>
       </div>)}</Async>
     </div>
   );

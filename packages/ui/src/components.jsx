@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Sun, Moon, ChevronLeft, Loader2, WifiOff, Inbox, X } from 'lucide-react';
+import brandWordmark from './assets/dusknyt-wordmark.png';
 
 export const cx = (...a) => a.filter(Boolean).join(' ');
 
@@ -22,12 +23,12 @@ export function ThemeToggle({ className }) {
 
 /* ---------- layout ---------- */
 export const Page = ({ children, className, wide, nav }) => (
-  <div className={cx('mx-auto min-h-screen', wide ? 'max-w-6xl' : 'max-w-md', nav && 'pb-24', className)}>{children}</div>
+  <div className={cx('app-shell mx-auto min-h-screen w-full', wide ? 'max-w-6xl' : 'max-w-md', nav && 'page-with-nav', className)}>{children}</div>
 );
 export function Header({ title, sub, back, right }) {
   const nav = useNavigate();
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-bg/90 px-4 py-3 backdrop-blur">
+    <div className="glass-bar sticky top-0 z-20 flex items-center gap-3 border-b border-line px-4 py-3">
       {back && <button onClick={() => nav(-1)} aria-label="Back"><ChevronLeft /></button>}
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-lg font-semibold">{title}</h1>
@@ -39,10 +40,10 @@ export function Header({ title, sub, back, right }) {
 }
 export function BottomNav({ items }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md justify-around border-t border-line bg-bg/95 py-2 backdrop-blur">
+    <nav className="glass-bar safe-bottom fixed inset-x-0 bottom-0 z-30 mx-auto flex w-full max-w-md justify-around border-t border-line px-1 pt-2">
       {items.map(({ to, label, icon: Icon, end, badge }) => (
-        <NavLink key={to} to={to} end={end} className={({ isActive }) => cx('relative flex flex-col items-center gap-0.5 px-3 text-[11px]', isActive ? 'text-brand' : 'text-muted')}>
-          <Icon size={20} />{label}
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => cx('relative flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-1 text-[10px] leading-tight sm:text-[11px]', isActive ? 'text-brand' : 'text-muted')}>
+          <Icon size={19} strokeWidth={2} />{label}
           {badge > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-bad px-1 text-[9px] text-white">{badge}</span>}
         </NavLink>
       ))}
@@ -50,7 +51,8 @@ export function BottomNav({ items }) {
   );
 }
 export function Logo({ className }) {
-  return <span className={cx('font-black tracking-[0.25em]', className)}>DUSKNYT</span>;
+  const width = className?.includes('text-4xl') ? 'w-56' : className?.includes('text-3xl') ? 'w-48' : className?.includes('text-2xl') ? 'w-40' : 'w-36';
+  return <img src={brandWordmark} alt="DUSKNYT" className={cx('inline-block h-auto max-w-full object-contain', width, className)} />;
 }
 
 /* ---------- form controls ---------- */
@@ -96,7 +98,7 @@ export const Toggle = ({ on, onChange }) => (
 );
 
 /* ---------- display ---------- */
-export const Card = ({ className, ...p }) => <div {...p} className={cx('rounded-2xl border border-line bg-card p-4', className)} />;
+export const Card = ({ className, ...p }) => <div {...p} className={cx('glass-panel rounded-2xl border border-line bg-card p-4', className)} />;
 const tone = {
   CONFIRMED: 'bg-ok/15 text-ok', ACTIVE: 'bg-ok/15 text-ok', PAID: 'bg-ok/15 text-ok',
   PENDING: 'bg-warn/15 text-warn', OPEN: 'bg-warn/15 text-warn', IN_PROGRESS: 'bg-brand/15 text-brand', UPCOMING: 'bg-brand/15 text-brand',

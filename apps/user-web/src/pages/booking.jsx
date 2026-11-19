@@ -32,7 +32,7 @@ export function GuestDetails() {
         {Array.from({ length: count - 1 }, (_, i) => <Input key={i} label={`Guest ${i + 2} name`} value={names[i]} onChange={(e) => setNames(names.map((n, j) => (j === i ? e.target.value : n)))} />)}
         <Textarea label="Special note (optional)" value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} />
       </div>
-      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-line bg-bg p-4"><Button disabled={!valid} onClick={() => { setDraft({ guests }); nav('/book/review'); }}>Continue</Button></div>
+      <div className="glass-bar safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md border-t border-line p-4"><Button disabled={!valid} onClick={() => { setDraft({ guests }); nav('/book/review'); }}>Continue</Button></div>
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function Review() {
         <label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} className="mt-0.5 accent-brand" />I agree to the terms and conditions</label>
         {err && <p className="text-sm text-bad">{err}</p>}
       </div>
-      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-line bg-bg p-4"><Button loading={send.isPending} disabled={!ok} onClick={() => { setErr(''); send.mutate(); }}>Confirm & Send Request</Button></div>
+      <div className="glass-bar safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md border-t border-line p-4"><Button loading={send.isPending} disabled={!ok} onClick={() => { setErr(''); send.mutate(); }}>Confirm & Send Request</Button></div>
     </div>
   );
 }

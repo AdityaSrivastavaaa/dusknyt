@@ -1,5 +1,5 @@
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
-import { Home as HomeIcon, Search, Ticket, Bookmark, User } from 'lucide-react';
+import { Home as HomeIcon, Search, Ticket, ClipboardList, User } from 'lucide-react';
 import { Page, BottomNav, RequireAuth } from '@dusknyt/ui';
 import { Splash, CitySelect } from './pages/onboarding';
 import { Home, Explore, SearchResults, Filters } from './pages/discovery';
@@ -10,7 +10,7 @@ import { Saved, MyGuestlists, Notifications, Profile, EditProfile, Settings, Hel
 
 const nav = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true }, { to: '/explore', label: 'Explore', icon: Search },
-  { to: '/offers', label: 'Offers', icon: Ticket }, { to: '/saved', label: 'Saved', icon: Bookmark }, { to: '/profile', label: 'Profile', icon: User },
+  { to: '/offers', label: 'Offers', icon: Ticket }, { to: '/guestlists', label: 'My Bookings', icon: ClipboardList }, { to: '/profile', label: 'Profile', icon: User },
 ];
 const Main = () => <Page nav><Outlet /><BottomNav items={nav} /></Page>;
 const Plain = () => <Page><Outlet /></Page>;
@@ -22,6 +22,7 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="explore" element={<Explore />} />
         <Route path="offers" element={<AllOffers />} />
+        <Route path="guestlists" element={<MyGuestlists />} />
         <Route path="saved" element={<Saved />} />
         <Route path="profile" element={<Profile />} />
       </Route>
@@ -43,7 +44,6 @@ export default function App() {
           <Route path="book/review" element={<Review />} />
           <Route path="book/submitted/:id" element={<Submitted />} />
           <Route path="requests/:id" element={<RequestStatus />} />
-          <Route path="guestlists" element={<MyGuestlists />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="profile/edit" element={<EditProfile />} />
           <Route path="settings" element={<Settings />} />

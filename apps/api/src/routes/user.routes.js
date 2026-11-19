@@ -110,7 +110,7 @@ r.put('/me', ...auth, wrap(async (req, res) => {
 }));
 
 /* ---------- guestlist requests ---------- */
-const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } } } } };
+const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true } } } } };
 r.post('/guestlist', ...auth, wrap(async (req, res) => {
   if (!req.user.name) throw new ApiError(400, 'Complete your profile first');
   const d = parse(z.object({

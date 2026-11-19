@@ -24,16 +24,17 @@ export function Saved() {
 }
 
 export function MyGuestlists() {
-  const [tab, setTab] = useState('upcoming');
-  const q = useQuery({ queryKey: ['guestlists', tab], queryFn: () => http.get('/guestlist', { status: tab }) });
+  const { token } = useAuth(); const nav = useNavigate(); const [tab, setTab] = useState('upcoming');
+  const q = useQuery({ queryKey: ['guestlists', tab], queryFn: () => http.get('/guestlist', { status: tab }), enabled: !!token });
+  if (!token) return <><Header title="My Bookings" /><LoginPrompt message="Log in to see your current guestlist requests and entry passes." onLogin={() => nav('/login', { state: { from: '/guestlists' } })} /></>;
   return (
     <div>
-      <Header back title="My Guestlists" />
-      <div className="p-4"><Tabs tabs={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'pending', label: 'Pending' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>
+      <Header title="My Bookings" sub="Requests, confirmations and entry passes" />
+      <div className="p-4"><Tabs tabs={[{ value: 'upcoming', label: 'Current' }, { value: 'pending', label: 'Pending' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>
       <Async q={q} empty={<EmptyState title="Nothing here" text="Your guestlist requests will show up here." />}>{(list) => (
         <div className="space-y-3 px-4">{list.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-card p-4">
-            <div><p className="font-semibold">{r.offer.club.name}</p><p className="text-xs text-muted">{fmtDate(r.offer.date)} · {r.offer.entryFrom || '9:00 PM'}–{r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
+            <div className="min-w-0 flex-1"><p className="truncate font-semibold">{r.offer.event?.title || r.offer.club.name}</p><p className="text-xs text-muted">{r.offer.club.name} · {fmtDate(r.offer.date)}</p><p className="text-xs text-muted">{r.guestCount} guests · {r.offer.entryFrom || '9:00 PM'}–{r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
     </div>
   );
 }
@@ -60,8 +61,8 @@ const MenuItem = ({ to, icon: Icon, label, onClick }) => {
   return <C to={to} onClick={onClick} className="flex w-full items-center gap-3 border-b border-line px-4 py-3.5 text-sm"><Icon size={18} className="text-muted" /><span className="flex-1 text-left">{label}</span><ChevronRight size={16} className="text-muted" /></C>;
 };
 
-function LoginPrompt({ onLogin }) {
-  return <div className="p-5"><Card className="text-center"><h2 className="font-semibold">Please log in</h2><p className="mt-2 text-sm text-muted">Log in to view your account and saved items.</p><Button className="mt-4" onClick={onLogin}>Log in</Button></Card></div>;
+function LoginPrompt({ onLogin, message = 'Log in to view your account and saved items.' }) {
+  return <div className="p-5"><Card className="text-center"><h2 className="font-semibold">Please log in</h2><p className="mt-2 text-sm text-muted">{message}</p><Button className="mt-4" onClick={onLogin}>Log in</Button></Card></div>;
 }
 
 export function Profile() {

@@ -25,7 +25,7 @@ r.get('/dashboard', wrap(async (req, res) => {
   res.json({
     name: req.user.name || req.promoter.brand, newRequests: fresh, confirmed,
     activeOffers,
-    upcoming: events.map((o) => ({ id: o.id, club: o.club.name, image: o.club.images[0], date: o.date, entryBefore: o.entryBefore, requests: o._count.requests })),
+    upcoming: events.map((o) => ({ id: o.id, club: o.club.name, image: o.club.images[0], date: o.date, entryFrom: o.entryFrom, entryBefore: o.entryBefore, requests: o._count.requests })),
   });
 }));
 
@@ -48,7 +48,8 @@ r.post('/events', wrap(async (req, res) => {
 }));
 const offerBody = z.object({
   clubId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
-  price: z.coerce.number().int().min(0).default(0), entryBefore: z.string().default('9:00 PM'),
+  entryTypes: z.array(z.string()).min(1).default([]),
+  price: z.coerce.number().int().min(0).default(0), entryFrom: z.string().default('9:00 PM'), entryBefore: z.string().default('11:00 PM'), limitedSlots: z.boolean().default(false),
   inclusions: z.array(z.string()).default([]), terms: z.string().optional(), description: z.string().optional(),
   status: z.enum(['ACTIVE', 'DRAFT', 'UPCOMING']).default('ACTIVE'),
 });
@@ -68,7 +69,8 @@ r.post('/offers', wrap(async (req, res) => {
   const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
   if (!club) throw new ApiError(400, 'Invalid club');
   if (d.eventId && !await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id } })) throw new ApiError(400, 'Event does not belong to the selected club');
-  res.status(201).json(await prisma.offer.create({ data: { ...d, date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
+  const entryTypes = d.entryTypes.length ? d.entryTypes : [d.entryType];
+  res.status(201).json(await prisma.offer.create({ data: { ...d, entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
 }));
 r.get('/offers/:id', wrap(async (req, res) => {
   const o = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id }, include: { club: true, event: true, _count: { select: { requests: true } } } });
@@ -80,7 +82,7 @@ r.put('/offers/:id', wrap(async (req, res) => {
   const own = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id } });
   if (!own) throw new ApiError(404, 'Offer not found');
   const { clubId, ...rest } = d; // club cannot be changed after creation
-  res.json(await prisma.offer.update({ where: { id: own.id }, data: { ...rest, ...(d.date && { date: new Date(d.date) }) } }));
+  res.json(await prisma.offer.update({ where: { id: own.id }, data: { ...rest, ...(d.entryTypes?.length && { entryType: d.entryTypes.join(', ') }), ...(d.date && { date: new Date(d.date) }) } }));
 }));
 r.patch('/offers/:id/status', wrap(async (req, res) => {
   const { status } = parse(z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'DRAFT']) }), req.body);

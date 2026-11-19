@@ -13,7 +13,8 @@ const Row = ({ k, v }) => <div className="flex justify-between py-1.5 text-sm"><
 export function GuestDetails() {
   const nav = useNavigate(); const { user } = useAuth(); const { draft, setDraft } = useStore();
   const o = draft.offer;
-  const [count, setCount] = useState(Math.max(1, draft.guests.length || (o?.entryType === 'Couple' ? 2 : 1)));
+  const entryTypes = o?.entryTypes?.length ? o.entryTypes : [o?.entryType].filter(Boolean);
+  const [count, setCount] = useState(Math.max(1, draft.guests.length || (entryTypes.includes('Couple') ? 2 : 1)));
   const [names, setNames] = useState(() => Array.from({ length: 10 }, (_, i) => draft.guests[i + 1]?.name || ''));
   if (!o) return <Navigate to="/" replace />;
   const guests = [{ name: user.name, gender: '' }, ...names.slice(0, count - 1).map((name) => ({ name, gender: '' }))];
@@ -24,7 +25,7 @@ export function GuestDetails() {
       <div className="space-y-4 p-4">
         <Input label="Your name" value={user.name} readOnly />
         <Input label="Phone number" value={user.phone || ''} readOnly />
-        <Input label="Entry type" value={`${o.entryType} Entry`} readOnly />
+        <Input label="Eligible for" value={(o.entryTypes?.length ? o.entryTypes : [o.entryType]).join(' & ')} readOnly />
         <div><p className="mb-1 text-xs text-muted">Number of guests</p>
           <div className="flex items-center justify-between rounded-xl border border-line bg-card px-3 py-2">
             <button onClick={() => setCount(Math.max(1, count - 1))}><Minus size={18} /></button><span className="font-semibold">{count}</span><button onClick={() => setCount(Math.min(10, count + 1))}><Plus size={18} /></button></div></div>
@@ -50,7 +51,7 @@ export function Review() {
       <Header back title="Review & Confirm" sub="Please review your details" />
       <div className="space-y-3 p-4">
         <Card><p className="text-xs text-muted">{o.promoter?.brand}</p><p className="text-sm text-muted">{o.club?.name} · {fmtDate(o.date)}</p><p className="text-3xl font-black">{o.price ? formatINR(o.price) : '₹0'}</p><p className="text-sm text-brand">{o.offerType}</p></Card>
-        <Card className="divide-y divide-line py-2"><Row k="Guests" v={draft.guests.length} /><Row k="Entry type" v={`${o.entryType} Entry`} /><Row k="Arrive before" v={o.entryBefore} /></Card>
+        <Card className="divide-y divide-line py-2"><Row k="Guests" v={draft.guests.length} /><Row k="Eligible for" v={(o.entryTypes?.length ? o.entryTypes : [o.entryType]).join(' & ')} /><Row k="Guestlist entry" v={`${o.entryFrom || '9:00 PM'}–${o.entryBefore}`} /></Card>
         <Card><p className="mb-1 text-xs text-muted">Guest list</p>{draft.guests.map((g, i) => <p key={i} className="text-sm">{i + 1}. {g.name}</p>)}</Card>
         <label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} className="mt-0.5 accent-brand" />I agree to the terms and conditions</label>
         {err && <p className="text-sm text-bad">{err}</p>}
@@ -89,7 +90,7 @@ export function RequestStatus() {
           <h2 className="mt-2 text-xl font-bold">{r.status === 'EXPIRED' ? 'Request Expired' : 'Request Not Accepted'}</h2>
           {r.rejectReason && <Card className="mt-4 text-left"><p className="text-xs text-muted">Reason</p><p className="text-sm">{r.rejectReason}</p></Card>}
           <div className="mt-4"><Button onClick={() => nav(`/clubs/${r.offer.club.id}/offers`)}>View Other Offers</Button></div></div>)}
-        <Card className="divide-y divide-line py-2"><Row k="Promoter" v={r.offer.promoter.brand} /><Row k="Club" v={r.offer.club.name} /><Row k="Date" v={fmtDate(r.offer.date)} /><Row k="Entry" v={`${r.offer.entryType} · ${r.guestCount} guest(s)`} /><Row k="Arrive before" v={r.offer.entryBefore} /></Card>
+        <Card className="divide-y divide-line py-2"><Row k="Promoter" v={r.offer.promoter.brand} /><Row k="Club" v={r.offer.club.name} /><Row k="Date" v={fmtDate(r.offer.date)} /><Row k="Entry" v={`${r.offer.entryType} · ${r.guestCount} guest(s)`} /><Row k="Guestlist entry" v={`${r.offer.entryFrom || '9:00 PM'}–${r.offer.entryBefore}`} /></Card>
       </div>)}</Async>
     </div>
   );

@@ -133,9 +133,12 @@ model Offer {
   promoterId  String
   title       String
   entryType   String
+  entryTypes  String[]       @default([])
   offerType   String
   price       Int            @default(0)
+  entryFrom   String         @default("9:00 PM")
   entryBefore String         @default("9:00 PM")
+  limitedSlots Boolean       @default(false)
   inclusions  String[]
   terms       String?
   description String?

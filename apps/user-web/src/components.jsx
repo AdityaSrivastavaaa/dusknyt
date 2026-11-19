@@ -37,8 +37,8 @@ export function OfferCard({ offer }) {
       <Img src={offer.club?.images?.[0]} name={offer.club?.name} className="h-14 w-14 rounded-xl" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs text-muted">{offer.promoter?.brand} · {offer.club?.name}</p>
-        <p className="font-semibold">{offer.offerType} <span className="text-xs font-normal text-muted">· {offer.entryType}</span></p>
-        <p className="text-[11px] text-muted">{fmtDate(offer.date)} · Before {offer.entryBefore}</p>
+        <p className="font-semibold">{offer.offerType} <span className="text-xs font-normal text-muted">· {offer.entryTypes?.length ? offer.entryTypes.join(' & ') : offer.entryType}</span></p>
+        <p className="text-[11px] text-muted">{fmtDate(offer.date)} · {offer.entryFrom || '9:00 PM'}–{offer.entryBefore}{offer.limitedSlots ? ' · Limited slots' : ''}</p>
       </div>
       <div className="text-right"><p className="text-lg font-bold">{formatINR(offer.price)}</p><SaveButton offerId={offer.id} className="!p-1" /></div>
     </Link>

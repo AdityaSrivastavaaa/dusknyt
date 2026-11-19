@@ -1,11 +1,11 @@
 export const ROLES = { USER: 'USER', PROMOTER: 'PROMOTER', ADMIN: 'ADMIN', SUPER_ADMIN: 'SUPER_ADMIN' };
 export const REQUEST_STATUS = ['PENDING', 'CONFIRMED', 'REJECTED', 'EXPIRED'];
 export const OFFER_STATUS = ['ACTIVE', 'UPCOMING', 'EXPIRED', 'DRAFT', 'INACTIVE'];
-export const ENTRY_TYPES = ['Couple', 'Stag', 'Ladies', 'Group'];
+export const ENTRY_TYPES = ['Couple', 'Girls', 'Ladies', 'Stag', 'Group'];
 export const OFFER_TYPES = ['Free Entry', 'Cover Charge', 'Stag Entry', 'Ladies Night'];
 export const MUSIC = ['EDM', 'Bollywood', 'Hip Hop', 'Commercial'];
 export const REJECT_REASONS = ['Capacity Full', 'Guest criteria not met', 'Offer unavailable', 'Other'];
-export const OFFER_INCLUSIONS = ['Complimentary entry', 'Skip the line', 'Welcome drink', 'Reserved table', 'Cover charge included', 'Food or snacks', 'Birthday celebration', 'Ladies entry', 'Couple entry', 'Group entry', 'Dedicated guestlist counter'];
+export const OFFER_INCLUSIONS = ['Complimentary Entry', 'Unlimited Drinks', 'Skip the line', 'Welcome drink', 'Reserved table', 'Cover charge included', 'Food or snacks', 'Birthday celebration', 'Dedicated guestlist counter'];
 export const formatINR = (n) => (n ? '₹' + Number(n).toLocaleString('en-IN') : 'Free Entry');
 export const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 export const fmtDateTime = (d) => new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });

@@ -52,7 +52,7 @@ r.get('/clubs', wrap(async (req, res) => {
   const { city, q, music, maxPrice, entryType, date } = req.query;
   const of = { status: 'ACTIVE' };
   if (maxPrice) of.price = { lte: +maxPrice };
-  if (entryType) of.entryType = { in: String(entryType).split(',') };
+  if (entryType) of.OR = [{ entryTypes: { hasSome: String(entryType).split(',') } }, { entryType: { in: String(entryType).split(',') } }];
   if (date) { const d = startOfDay(date); of.date = { gte: d, lt: addDays(d, 1) }; }
   const where = {
     status: 'ACTIVE', ...cityWhere(city),

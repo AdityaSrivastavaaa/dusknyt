@@ -31,7 +31,7 @@ export function MyGuestlists() {
       <Async q={q} empty={<EmptyState title="Nothing here" text="Your guestlist requests will show up here." />}>{(list) => (
         <div className="space-y-3 px-4">{list.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-card p-4">
-            <div><p className="font-semibold">{r.offer.club.name}</p><p className="text-xs text-muted">{fmtDate(r.offer.date)} · {r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
+            <div><p className="font-semibold">{r.offer.club.name}</p><p className="text-xs text-muted">{fmtDate(r.offer.date)} · {r.offer.entryFrom || '9:00 PM'}–{r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
     </div>
   );
 }

@@ -125,21 +125,22 @@ r.get('/offers/:id', wrap(async (req, res) => {
   res.json({ ...o, confirmed });
 }));
 const offerBody = z.object({
-  clubId: z.string(), promoterId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
-  price: z.coerce.number().int().min(0).default(0), entryBefore: z.string().default('9:00 PM'), inclusions: z.array(z.string()).default([]),
+  clubId: z.string(), promoterId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), entryTypes: z.array(z.string()).default([]), offerType: z.string(),
+  price: z.coerce.number().int().min(0).default(0), entryFrom: z.string().default('9:00 PM'), entryBefore: z.string().default('11:00 PM'), limitedSlots: z.boolean().default(false), inclusions: z.array(z.string()).default([]),
   terms: z.string().optional(), description: z.string().optional(), status: z.enum(['ACTIVE', 'UPCOMING', 'EXPIRED', 'DRAFT', 'INACTIVE']).default('ACTIVE'),
 });
 r.post('/offers', wrap(async (req, res) => {
   const d = parse(offerBody, req.body);
   const club = await prisma.club.findUnique({ where: { id: d.clubId } });
   if (!club) throw new ApiError(400, 'Invalid club');
-  const o = await prisma.offer.create({ data: { ...d, date: new Date(d.date), title: `${d.offerType} · ${d.entryType} @ ${club.name}` } });
+  const entryTypes = d.entryTypes.length ? d.entryTypes : [d.entryType];
+  const o = await prisma.offer.create({ data: { ...d, entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: `${d.offerType} · ${entryTypes.join(', ')} @ ${club.name}` } });
   await logActivity(req.user, `Offer '${o.title}' created`, 'offer', o.id);
   res.status(201).json(o);
 }));
 r.put('/offers/:id', wrap(async (req, res) => {
   const d = parse(offerBody.partial(), req.body);
-  res.json(await prisma.offer.update({ where: { id: req.params.id }, data: { ...d, ...(d.date && { date: new Date(d.date) }) } }));
+  res.json(await prisma.offer.update({ where: { id: req.params.id }, data: { ...d, ...(d.entryTypes?.length && { entryType: d.entryTypes.join(', ') }), ...(d.date && { date: new Date(d.date) }) } }));
 }));
 r.patch('/offers/:id/status', wrap(async (req, res) => {
   const { status } = parse(z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'DRAFT', 'UPCOMING']) }), req.body);

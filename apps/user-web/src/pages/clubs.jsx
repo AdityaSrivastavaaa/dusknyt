@@ -102,7 +102,7 @@ export function OfferDetails() {
       <Async q={q}>{(o) => (<div className="space-y-5 p-4">
         <Card><p className="text-xs text-muted">{o.promoter.brand} · {o.club.name}</p>
           <p className="mt-1 text-4xl font-black">{o.price ? formatINR(o.price) : '₹0'}</p>
-          <p className="font-semibold text-brand">{o.offerType} · {o.entryType}</p><p className="mt-1 text-xs text-muted">{fmtDate(o.date)} · Arrive before {o.entryBefore}</p></Card>
+          <p className="font-semibold text-brand">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="mt-1 text-xs text-muted">{fmtDate(o.date)} · Entry {o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></Card>
         {o.inclusions.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">What's Included</h3><ul className="space-y-1.5 text-sm text-muted">{o.inclusions.map((x) => <li key={x} className="flex gap-2"><Check size={14} className="mt-0.5 text-ok" />{x}</li>)}</ul></div>}
         {o.terms && <div><h3 className="mb-2 text-sm font-semibold">Terms & Conditions</h3><p className="text-xs text-muted">{o.terms}</p></div>}
         <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-line bg-bg p-4"><Button onClick={() => go(o)}>Get Guestlist Entry</Button></div>

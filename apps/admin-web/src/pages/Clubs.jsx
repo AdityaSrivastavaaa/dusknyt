@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Async, Button, Input, Select, Textarea, Chip, Badge, Card, Img, Tabs, EmptyState } from '@dusknyt/ui';
+import { Async, Button, Input, Select, Textarea, Chip, Badge, Card, Img, Tabs, EmptyState, ErrorState } from '@dusknyt/ui';
 import { MUSIC, formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
@@ -40,8 +40,10 @@ export function ClubDetails() {
 
 export function ClubForm() {
   const { id } = useParams(); const nav = useNavigate(); const qc = useQueryClient(); const [err, setErr] = useState('');
+  const [cityName, setCityName] = useState('');
   const cities = useQuery({ queryKey: ['a-cities'], queryFn: () => http.get('/admin/cities') });
   const existing = useQuery({ queryKey: ['a-club', id], queryFn: () => http.get(`/admin/clubs/${id}`), enabled: !!id });
+  const cityList = Array.isArray(cities.data) ? cities.data : [];
   const [f, setF] = useState(null);
   const form = f || (id ? existing.data && { ...existing.data, image: existing.data.images[0] || '', music: existing.data.music } : { cityId: '', name: '', address: '', area: '', phone: '', email: '', dressCode: '', about: '', image: '', music: [] });
   const set = (k) => (e) => setF({ ...form, [k]: e.target.value });
@@ -61,24 +63,33 @@ export function ClubForm() {
       setErr(''); setF({ ...form, image: dataUrl });
     } catch { setErr('Could not read this image. Try another file.'); }
   };
+  const addCity = useMutation({
+    mutationFn: () => http.post('/admin/cities', { name: cityName.trim() }),
+    onSuccess: (city) => { qc.setQueryData(['a-cities'], (old = []) => [...old, city]); setF({ ...form, cityId: city.id }); setCityName(''); setErr(''); },
+    onError: (e) => setErr(errMsg(e)),
+  });
   const save = useMutation({
     mutationFn: () => {
-      const body = { cityId: form.cityId || cities.data[0].id, name: form.name, address: form.address, area: form.area || undefined, phone: form.phone || undefined, email: form.email || '', dressCode: form.dressCode || undefined, about: form.about || undefined, music: form.music, images: form.image ? [form.image] : [] };
+      const cityId = form.cityId || cityList[0]?.id;
+      if (!cityId) throw new Error('Add a city before saving this club.');
+      const body = { cityId, name: form.name, address: form.address, area: form.area || undefined, phone: form.phone || undefined, email: form.email || '', dressCode: form.dressCode || undefined, about: form.about || undefined, music: form.music, images: form.image ? [form.image] : [] };
       return id ? http.put(`/admin/clubs/${id}`, body) : http.post('/admin/clubs', body);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['a-clubs'] }); nav('/clubs'); }, onError: (e) => setErr(errMsg(e)),
   });
-  if (!form || !cities.data) return <div className="p-6 text-sm text-muted">Loading…</div>;
+  if (cities.isLoading || (id && existing.isLoading)) return <div className="p-6 text-sm text-muted">Loading…</div>;
+  if (cities.isError) return <ErrorState onRetry={cities.refetch} />;
+  if (!form) return <ErrorState onRetry={existing.refetch} />;
   return (<div><PageTitle title={id ? 'Edit Club' : 'Add New Club'} />
     <Card className="max-w-xl space-y-4">
       <label className="block text-xs text-muted">Club banner (admin managed)<input type="file" accept="image/*" onChange={(e) => uploadBanner(e.target.files?.[0])} className="mt-1 block w-full text-sm" /></label>
       {form.image && <Img src={form.image} name={form.name || 'Club'} className="h-40 w-full rounded-xl" />}<Input label="Club name" value={form.name} onChange={set('name')} />
       <Input label="Full address" value={form.address} onChange={set('address')} /><Input label="Area" value={form.area || ''} onChange={set('area')} />
-      <Select label="City" value={form.cityId || cities.data[0].id} onChange={set('cityId')} options={cities.data.map((c) => ({ value: c.id, label: c.name }))} />
+      {cityList.length > 0 ? <Select label="City" value={form.cityId || cityList[0].id} onChange={set('cityId')} options={cityList.map((c) => ({ value: c.id, label: c.name }))} /> : <div className="rounded-xl border border-line p-3"><p className="text-xs text-muted">No cities exist yet. Add a city to continue creating this club.</p><div className="mt-2 flex gap-2"><Input aria-label="City name" label="First city" value={cityName} onChange={(e) => setCityName(e.target.value)} placeholder="e.g. Delhi" /><Button className="mt-1 !w-auto self-end" loading={addCity.isPending} disabled={cityName.trim().length < 2} onClick={() => addCity.mutate()}>Add city</Button></div></div>}
       <Input label="Contact number" value={form.phone || ''} onChange={set('phone')} /><Input label="Email" value={form.email || ''} onChange={set('email')} /><Input label="Dress code" value={form.dressCode || ''} onChange={set('dressCode')} />
       <div><p className="mb-1 text-xs text-muted">Music</p><div className="flex flex-wrap gap-2">{MUSIC.map((m) => <Chip key={m} active={form.music.includes(m)} onClick={() => setF({ ...form, music: form.music.includes(m) ? form.music.filter((x) => x !== m) : [...form.music, m] })}>{m}</Chip>)}</div></div>
       <Textarea label="About" value={form.about || ''} onChange={set('about')} />
       {err && <p className="text-xs text-bad">{err}</p>}
-      <div className="flex gap-3"><Button variant="outline" onClick={() => nav(-1)}>Cancel</Button><Button loading={save.isPending} disabled={!form.name || !form.address} onClick={() => save.mutate()}>Save Club</Button></div>
+      <div className="flex gap-3"><Button variant="outline" onClick={() => nav(-1)}>Cancel</Button><Button loading={save.isPending} disabled={!form.name || !form.address || !(form.cityId || cityList[0]?.id)} onClick={() => save.mutate()}>Save Club</Button></div>
     </Card></div>);
 }

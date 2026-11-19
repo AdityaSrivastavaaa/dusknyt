@@ -34,7 +34,7 @@ export function MyGuestlists() {
       <Async q={q} empty={<EmptyState title="Nothing here" text="Your guestlist requests will show up here." />}>{(list) => (
         <div className="space-y-3 px-4">{list.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-card p-4">
-            <div className="min-w-0 flex-1"><p className="truncate font-semibold">{r.offer.event?.title || r.offer.club.name}</p><p className="text-xs text-muted">{r.offer.club.name} · {fmtDate(r.offer.date)}</p><p className="text-xs text-muted">{r.guestCount} guests · {r.offer.entryFrom || '9:00 PM'}–{r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
+            <div className="min-w-0 flex-1"><p className="truncate font-semibold">{r.offer.event?.title || r.offer.club.name}</p><p className="text-xs text-muted">{r.offer.club.name} · {fmtDate(r.offer.date)}</p><p className="text-xs text-muted">{r.guestCount} guests · {r.offer.entryFrom || '9:00 PM'}–{r.offer.entryBefore}</p><p className="text-xs text-muted">{r.offer.promoter.brand}</p><p className="mt-1 text-xs text-fg">Guest names: {(r.guests || []).map((guest) => guest.name).filter(Boolean).join(', ') || 'No guest names provided'}</p></div><Badge s={r.status} /></Link>))}</div>)}</Async>
     </div>
   );
 }

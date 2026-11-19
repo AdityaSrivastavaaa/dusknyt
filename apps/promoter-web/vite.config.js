@@ -10,7 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: {
         name: 'DUSKNYT Promoter', short_name: 'DN Promoter', start_url: '/splash', scope: '/', display: 'standalone',
-        background_color: '#0b0812', theme_color: '#0b0812',
+        background_color: '#111116', theme_color: '#111116',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },

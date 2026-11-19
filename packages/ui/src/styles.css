@@ -5,11 +5,12 @@
 :root { --bg: 245 245 240; --card: 250 249 246; --fg: 17 17 22; --muted: 106 106 116; --line: 222 220 226; color-scheme: light; }
 .dark { --bg: 17 17 22; --card: 28 28 36; --fg: 245 245 240; --muted: 169 167 179; --line: 63 62 73; color-scheme: dark; }
 html, body, #root { width: 100%; min-height: 100%; overflow-x: clip; }
-body { @apply bg-bg font-sans text-fg antialiased; min-height: 100dvh; background-image: radial-gradient(ellipse at 15% -5%, rgb(183 156 255 / .13), transparent 40%), radial-gradient(ellipse at 100% 50%, rgb(183 156 255 / .06), transparent 38%); background-attachment: fixed; overscroll-behavior-y: contain; }
+html { min-height: -webkit-fill-available; }
+body { @apply bg-bg font-sans text-fg antialiased; min-height: 100vh; min-height: 100dvh; background-image: radial-gradient(ellipse at 15% -5%, rgb(183 156 255 / .13), transparent 40%), radial-gradient(ellipse at 100% 50%, rgb(183 156 255 / .06), transparent 38%); overscroll-behavior-y: contain; -webkit-text-size-adjust: 100%; }
 input, select, textarea, button { font: inherit; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 img, svg, video { max-width: 100%; }
-.app-shell { overflow-x: clip; min-height: 100dvh; }
+.app-shell { overflow-x: clip; min-height: 100vh; min-height: 100dvh; }
 .page-with-nav { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
 .safe-bottom { padding-bottom: calc(.55rem + env(safe-area-inset-bottom)); }
 .glass-panel { background: rgb(var(--card) / .62); border-color: rgb(var(--line) / .68); -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%); box-shadow: 0 10px 32px rgb(0 0 0 / .13), inset 0 1px 0 rgb(255 255 255 / .07); }

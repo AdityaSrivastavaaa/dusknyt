@@ -28,8 +28,11 @@ export function ClubDetails() {
           {c.about && <div><h3 className="mb-1 text-sm font-semibold">About</h3><p className="text-sm text-muted">{c.about}</p></div>}
           <div className="flex justify-between text-sm"><span className="text-muted">Music</span><span>{c.music.join(' · ') || '—'}</span></div>
           <div className="flex justify-between text-sm"><span className="text-muted">Dress code</span><span>{c.dressCode || '—'}</span></div>
-          {c.events?.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Upcoming events</h3><div className="space-y-2">{c.events.slice(0, 3).map((e) => (
-            <Card key={e.id} className="flex justify-between p-3 text-sm"><div><p className="font-medium">{e.title}</p><p className="text-xs text-muted">{e.djName}</p></div><p className="text-xs text-muted">{fmtDate(e.date)}<br />{e.startTime}</p></Card>))}</div></div>}
+          {c.events?.length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Upcoming events</h3><div className="space-y-3">{c.events.slice(0, 3).map((e) => (
+            <button key={e.id} type="button" onClick={() => nav(`/clubs/${c.id}/offers?date=${e.date.slice(0, 10)}&eventId=${e.id}`)} className="glass-panel w-full overflow-hidden rounded-2xl border border-line text-left">
+              <div className="relative grid aspect-[16/8] place-items-end bg-gradient-to-br from-brand-dark to-black">{e.poster && <img src={e.poster} alt={`${e.title} event banner`} className="absolute inset-0 h-full w-full object-cover" />}<div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" /><div className="relative w-full p-3 text-white"><p className="text-lg font-bold">{e.title}</p><p className="text-xs text-white/80">{c.name} · {fmtDate(e.date)} · {e.startTime}</p></div></div>
+              <div className="space-y-1 p-3 text-xs"><p><span className="text-muted">DJ / Performer:</span> {e.djName || 'To be announced'}</p><p><span className="text-muted">Music / Theme:</span> {e.genre || 'To be announced'}</p><p className="text-muted">{c.address}</p><p className="pt-1 font-semibold text-brand">See offers for this event</p></div>
+            </button>))}</div></div>}
         </div>
         <div className="glass-bar fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md border-t border-line p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"><Button onClick={() => nav(`/clubs/${c.id}/offers`)}>Compare Offers</Button></div>
       </>)}</Async>
@@ -50,8 +53,9 @@ export function EventSelect() {
         return (<div className="p-4">
           <div className="no-scrollbar flex gap-2 overflow-x-auto">{days.map((d) => <Chip key={d} active={d === day} onClick={() => setSel(d)}>{fmtDate(d)}</Chip>)}</div>
           <p className="mb-2 mt-5 text-xs text-muted">Events on {fmtDate(day)}</p>
-          <div className="space-y-3">{(() => { const events = list.filter((e) => e.date.slice(0, 10) === day); return <button onClick={() => nav(`/clubs/${id}/offers?date=${day}`)} className="w-full rounded-2xl border border-line bg-card p-4 text-left">
-            <p className="font-semibold">{events.length === 1 ? events[0].title : `${events.length} events`}</p><p className="text-xs text-muted">{events.map((e) => [e.title, e.djName].filter(Boolean).join(' · ')).join(' / ')}</p><p className="text-xs text-muted">{events.map((e) => e.startTime).filter((x, i, a) => a.indexOf(x) === i).join(' · ')} Onwards</p></button>; })()}</div>
+          <div className="space-y-3">{list.filter((e) => e.date.slice(0, 10) === day).map((e) => <button key={e.id} onClick={() => nav(`/clubs/${id}/offers?date=${day}&eventId=${e.id}`)} className="glass-panel w-full overflow-hidden rounded-2xl border border-line text-left">
+            <div className="relative grid aspect-[16/8] place-items-end bg-gradient-to-br from-brand-dark to-black">{e.poster && <img src={e.poster} alt={`${e.title} event banner`} className="absolute inset-0 h-full w-full object-cover" />}<div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" /><div className="relative w-full p-3 text-white"><p className="text-lg font-bold">{e.title}</p><p className="text-xs text-white/80">{e.club?.name} · {fmtDate(e.date)} · {e.startTime}</p></div></div>
+            <div className="space-y-1 p-3 text-xs"><p><span className="text-muted">DJ / Performer:</span> {e.djName || 'To be announced'}</p><p><span className="text-muted">Music / Theme:</span> {e.genre || 'To be announced'}</p><p className="text-muted">{e.club?.address || e.club?.area}</p><p className="pt-1 font-semibold text-brand">See offers for this event</p></div></button>)}</div>
         </div>);
       }}</Async>
     </div>

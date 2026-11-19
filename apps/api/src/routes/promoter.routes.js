@@ -33,17 +33,20 @@ r.get('/dashboard', wrap(async (req, res) => {
 r.get('/clubs', wrap(async (req, res) => {
   res.json(await prisma.club.findMany({
     where: { status: 'ACTIVE' }, orderBy: { name: 'asc' },
-    select: { id: true, name: true, area: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, select: { id: true, title: true, djName: true, date: true, startTime: true } } },
+    select: { id: true, name: true, area: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, select: { id: true, title: true, djName: true, date: true, startTime: true, genre: true, poster: true } } },
   }));
 }));
 // Matching event title and club/date reuse one shared event across promoters.
 r.post('/events', wrap(async (req, res) => {
-  const d = parse(z.object({ clubId: z.string(), title: z.string().min(2), djName: z.string().optional(), date: z.string(), startTime: z.string().default('9:00 PM'), genre: z.string().optional() }), req.body);
+  const d = parse(z.object({ clubId: z.string(), title: z.string().min(2), djName: z.string().optional(), date: z.string(), startTime: z.string().default('9:00 PM'), genre: z.string().optional(), poster: z.string().url().optional().or(z.literal('')) }), req.body);
   const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
   if (!club) throw new ApiError(400, 'Select an active club');
   const date = new Date(d.date), from = startOfDay(date), to = addDays(from, 1);
   const existing = await prisma.event.findFirst({ where: { clubId: club.id, title: { equals: d.title, mode: 'insensitive' }, date: { gte: from, lt: to } } });
-  if (existing) return res.json(existing);
+  if (existing) {
+    if (d.poster && !existing.poster) return res.json(await prisma.event.update({ where: { id: existing.id }, data: { poster: d.poster } }));
+    return res.json(existing);
+  }
   res.status(201).json(await prisma.event.create({ data: { ...d, date, clubId: club.id } }));
 }));
 const offerBody = z.object({

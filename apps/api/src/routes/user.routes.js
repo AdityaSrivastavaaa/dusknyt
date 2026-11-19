@@ -7,7 +7,7 @@ import { createRequest } from '../services/guestlist.js';
 
 const r = Router();
 const auth = [authenticate, authorize('USER')];
-const offerInclude = { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true } } };
+const offerInclude = { club: { select: { id: true, name: true, area: true, address: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } };
 const withPrice = (c) => ({ ...c, startingPrice: c.offers?.length ? Math.min(...c.offers.map((o) => o.price)) : null, offerCount: c.offers?.length || 0, offers: undefined });
 const cityWhere = (city) => (city ? { city: { name: { equals: city, mode: 'insensitive' } } } : {});
 
@@ -73,7 +73,7 @@ r.get('/clubs/:id', wrap(async (req, res) => {
   res.json(club);
 }));
 r.get('/clubs/:id/events', wrap(async (req, res) => {
-  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, orderBy: { date: 'asc' } }));
+  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, include: { club: { select: { name: true, address: true, area: true } } }, orderBy: { date: 'asc' } }));
 }));
 r.get('/clubs/:id/offers', wrap(async (req, res) => {
   const { eventId, date, sort } = req.query;
@@ -110,7 +110,7 @@ r.put('/me', ...auth, wrap(async (req, res) => {
 }));
 
 /* ---------- guestlist requests ---------- */
-const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true } } } } };
+const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
 r.post('/guestlist', ...auth, wrap(async (req, res) => {
   if (!req.user.name) throw new ApiError(400, 'Complete your profile first');
   const d = parse(z.object({

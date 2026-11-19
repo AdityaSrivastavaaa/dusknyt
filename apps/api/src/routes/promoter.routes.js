@@ -125,10 +125,17 @@ const guestlistWhere = (req) => {
 r.get('/guestlist', wrap(async (req, res) => {
   res.json(await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } }));
 }));
+r.post('/guestlist/:id/check-in', wrap(async (req, res) => {
+  const request = await prisma.guestRequest.findFirst({ where: { id: req.params.id, ...mine(req) }, include: reqInclude });
+  if (!request) throw new ApiError(404, 'Guestlist request not found');
+  if (request.status !== 'CONFIRMED') throw new ApiError(400, 'Only confirmed guests can be checked in');
+  if (request.checkedInAt) return res.json(request);
+  res.json(await prisma.guestRequest.update({ where: { id: request.id }, data: { checkedInAt: new Date() }, include: reqInclude }));
+}));
 r.get('/guestlist/export', wrap(async (req, res) => {
   const rows = await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } });
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = ['Code,Name,Phone,Club,Guests,Entry,Arrive Before,Status', ...rows.map((g) => [g.code, g.user.name, g.user.phone, g.offer.club.name, g.guestCount, g.offer.entryType, g.offer.entryBefore, g.status].map(esc).join(','))].join('\n');
+  const csv = ['Code,Name,Phone,Club,Guests,Entry,Arrive Before,Status,Checked In At', ...rows.map((g) => [g.code, g.user.name, g.user.phone, g.offer.club.name, g.guestCount, g.offer.entryType, g.offer.entryBefore, g.status, g.checkedInAt?.toISOString() || ''].map(esc).join(','))].join('\n');
   res.type('text/csv').attachment('guestlist.csv').send(csv);
 }));
 

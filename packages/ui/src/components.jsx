@@ -28,13 +28,13 @@ export const Page = ({ children, className, wide, nav }) => (
 export function Header({ title, sub, back, right }) {
   const nav = useNavigate();
   return (
-    <div className="glass-bar sticky top-0 z-20 flex items-center gap-3 border-b border-line px-4 py-3">
-      {back && <button onClick={() => nav(-1)} aria-label="Back"><ChevronLeft /></button>}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-lg font-semibold">{title}</h1>
-        {sub && <p className="truncate text-xs text-muted">{sub}</p>}
+    <div className="glass-bar sticky top-0 z-20 box-border flex w-full min-w-0 max-w-full items-center gap-2 border-b border-line px-3 pb-3 pt-[calc(.75rem+env(safe-area-inset-top))] sm:gap-3 sm:px-4">
+      {back && <button onClick={() => nav(-1)} aria-label="Back" className="grid h-10 w-10 shrink-0 place-items-center rounded-full"><ChevronLeft size={22} /></button>}
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <h1 className="max-w-full truncate text-lg font-semibold">{title}</h1>
+        {sub && <p className="max-w-full truncate text-xs text-muted">{sub}</p>}
       </div>
-      {right}
+      {right && <div className="ml-auto flex shrink-0 items-center">{right}</div>}
     </div>
   );
 }

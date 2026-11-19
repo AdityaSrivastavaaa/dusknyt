@@ -167,6 +167,7 @@ model GuestRequest {
   rejectReason String?
   promoterNote String?
   qrCode       String?
+  checkedInAt  DateTime?
   reviewedById String?
   seenAt       DateTime?
   createdAt    DateTime      @default(now())

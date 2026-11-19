@@ -17,9 +17,9 @@ export function Home() {
   if (!city) return <Navigate to="/city" replace />;
   return (
     <div>
-      <div className="flex items-center justify-between px-4 pt-4">
-        <div><Logo className="text-lg" /><button onClick={() => nav('/city')} className="flex items-center gap-1 text-xs text-muted">{city}<ChevronDown size={12} /></button></div>
-        <Link to="/notifications" aria-label="Notifications"><Bell size={20} /></Link>
+      <div className="flex min-w-0 items-center justify-between gap-3 px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
+        <div className="min-w-0 flex-1"><Logo className="!w-32 max-w-full sm:!w-36 block" /><button onClick={() => nav('/city')} className="flex max-w-full min-w-0 items-center gap-1 text-xs text-muted"><span className="truncate">{city}</span><ChevronDown size={12} className="shrink-0" /></button></div>
+        <Link to="/notifications" aria-label="Notifications" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line bg-card text-fg"><Bell size={19} /></Link>
       </div>
       <button onClick={() => nav('/search')} className="mx-4 mt-4 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-muted"><Search size={16} />Search clubs, events, experiences…</button>
       <Async q={q} empty={<EmptyState title="No clubs yet" text="We're adding venues in your city soon." />}>{(d) => (<>

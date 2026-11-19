@@ -29,14 +29,17 @@ export function Requests() {
 export function RequestDetails() {
   const { id } = useParams(); const qc = useQueryClient();
   const q = useQuery({ queryKey: ['request', id], queryFn: () => http.get(`/promoter/requests/${id}`) });
+  const checkIn = useMutation({ mutationFn: () => http.post(`/promoter/guestlist/${id}/check-in`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['request', id] }); qc.invalidateQueries({ queryKey: ['guestlist'] }); }, onError: (e) => setCheckInError(errMsg(e)) });
+  const [checkInError, setCheckInError] = useState('');
   useEffect(() => { if (q.data) qc.invalidateQueries({ queryKey: ['requests'] }); }, [q.data?.id]); // opening marks it as seen
   return (
     <div>
       <Header back title="Request Details" />
       <Async q={q}>{(r) => (<div className="space-y-4 p-4">
         <div className="flex items-center gap-3"><Avatar src={r.user.avatar} name={r.user.name} size={48} /><div><p className="font-semibold">{r.user.name}</p><p className="text-xs text-muted">{r.user.phone}</p></div><div className="ml-auto"><Badge s={r.status} /></div></div>
-        <Card className="divide-y divide-line py-2"><Row k="Request ID" v={r.code} /><Row k="Club" v={r.offer.club.name} /><Row k="Entry type" v={`${r.offer.entryType} Entry`} /><Row k="Number of guests" v={r.guestCount} /><Row k="Arrive before" v={r.offer.entryBefore} />{r.note && <Row k="Note" v={r.note} />}</Card>
+        <Card className="divide-y divide-line py-2"><Row k="Request ID" v={r.code} /><Row k="Club" v={r.offer.club.name} /><Row k="Entry type" v={`${r.offer.entryType} Entry`} /><Row k="Number of guests" v={r.guestCount} /><Row k="Arrive before" v={r.offer.entryBefore} />{r.checkedInAt && <Row k="Entry marked" v={new Date(r.checkedInAt).toLocaleString('en-IN')} />}{r.note && <Row k="Note" v={r.note} />}</Card>
         <Card><p className="mb-1 text-xs text-muted">Guests</p>{(r.guests || []).map((g, i) => <p key={i} className="text-sm">{i + 1}. {g.name}{g.gender ? ` (${g.gender})` : ''}</p>)}</Card>
+        {r.status === 'CONFIRMED' && (r.checkedInAt ? <Card className="border-ok/40 text-sm text-ok">This guest group was checked in at {new Date(r.checkedInAt).toLocaleString('en-IN')}.</Card> : <Card className="space-y-3"><p className="text-sm text-muted">Mark the confirmed guest group as entered at the venue.</p>{checkInError && <p className="text-xs text-bad">{checkInError}</p>}<Button loading={checkIn.isPending} onClick={() => { setCheckInError(''); checkIn.mutate(); }}>Mark Group Entered</Button></Card>)}
         {r.status === 'PENDING' ? <Link to={`/requests/${r.id}/review`}><Button>Review Request</Button></Link>
           : r.rejectReason && <p className="text-xs text-muted">Reason: {r.rejectReason}</p>}
       </div>)}</Async>
@@ -71,7 +74,9 @@ export function ReviewRequest() {
 
 export function Guestlist() {
   const [tab, setTab] = useState('tonight');
+  const qc = useQueryClient(); const [checkInError, setCheckInError] = useState('');
   const q = useQuery({ queryKey: ['guestlist', tab], queryFn: () => http.get('/promoter/guestlist', { tab }) });
+  const checkIn = useMutation({ mutationFn: (id) => http.post(`/promoter/guestlist/${id}/check-in`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['guestlist'] }); qc.invalidateQueries({ queryKey: ['request'] }); }, onError: (e) => setCheckInError(errMsg(e)) });
   const exportCsv = async () => {
     const res = await http.raw.get('/promoter/guestlist/export', { params: { tab }, responseType: 'blob' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = `guestlist-${tab}.csv`; a.click(); URL.revokeObjectURL(a.href);
@@ -81,8 +86,10 @@ export function Guestlist() {
       <Header title="Guestlist" />
       <div className="p-4"><Tabs tabs={[{ value: 'tonight', label: 'Tonight' }, { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>
       <Async q={q} empty={<EmptyState title="No guests" text="Confirmed and pending guests for this period appear here." />}>{(list) => (<>
-        <div className="divide-y divide-line">{list.map((g) => (<div key={g.id} className="flex items-center gap-3 px-4 py-3"><Avatar src={g.user.avatar} name={g.user.name} />
-          <div className="flex-1"><p className="font-medium">{g.user.name}</p><p className="text-xs text-muted">{g.guestCount} Guests · {g.offer.entryType} Entry · by {g.offer.entryBefore}</p></div><Badge s={g.status} /></div>))}</div>
+        {checkInError && <p className="mx-4 mb-3 rounded-xl border border-bad/30 bg-bad/10 p-3 text-xs text-bad">{checkInError}</p>}
+        <div className="space-y-3 px-4">{list.map((g) => (<Card key={g.id} className="space-y-3 p-3"><div className="flex min-w-0 items-start gap-3"><Avatar src={g.user.avatar} name={g.user.name} />
+          <div className="min-w-0 flex-1"><p className="truncate font-medium">{g.user.name}</p><p className="text-xs text-muted">{g.offer.club.name} · {g.guestCount} guest{g.guestCount === 1 ? '' : 's'}</p><p className="text-xs text-muted">{g.offer.entryType} Entry · arrive by {g.offer.entryBefore}</p><p className="mt-1 break-words text-xs">{(g.guests || []).map((guest) => guest.name).filter(Boolean).join(', ')}</p></div><Badge s={g.status} /></div>
+          {g.status === 'CONFIRMED' && (g.checkedInAt ? <p className="rounded-lg bg-ok/10 px-3 py-2 text-xs text-ok">Entered · {new Date(g.checkedInAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p> : <Button className="!py-2.5" loading={checkIn.isPending && checkIn.variables === g.id} disabled={checkIn.isPending} onClick={() => { setCheckInError(''); checkIn.mutate(g.id); }}>Mark Group Entered</Button>)}</Card>))}</div>
         <div className="p-4"><Button onClick={exportCsv}>Export Guestlist</Button></div></>)}</Async>
     </div>
   );

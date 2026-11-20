@@ -8,6 +8,18 @@ import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 import { ClubCard, OfferCard } from '../components';
 
+async function profilePhotoDataUrl(file) {
+  if (!file?.type.startsWith('image/')) throw new Error('Choose an image file.');
+  const source = URL.createObjectURL(file); const image = new Image();
+  try {
+    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = source; });
+    const scale = Math.min(1, 512 / image.width, 512 / image.height);
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(image.width * scale)); canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.84);
+  } finally { URL.revokeObjectURL(source); }
+}
+
 export function Saved() {
   const { token } = useAuth(); const nav = useNavigate();
   const [tab, setTab] = useState('clubs');
@@ -92,8 +104,7 @@ export function EditProfile() {
   return (
     <div>
       <Header back title="Edit Profile" />
-      <div className="space-y-4 p-4"><div className="flex justify-center"><Avatar src={f.avatar} name={f.name} size={72} /></div>
-        <Input label="Photo URL" value={f.avatar} onChange={(e) => setF({ ...f, avatar: e.target.value })} placeholder="https://…" />
+      <div className="space-y-4 p-4"><div className="flex flex-col items-center gap-3"><Avatar src={f.avatar} name={f.name} size={88} /><label className="w-full rounded-xl border border-line bg-card p-3 text-xs text-muted">Upload profile photo from your phone<input type="file" accept="image/*" onChange={async (e) => { try { setErr(''); const avatar = await profilePhotoDataUrl(e.target.files?.[0]); setF((old) => ({ ...old, avatar })); } catch (error) { setErr(error.message || 'Could not read this image.'); } }} className="mt-2 block w-full text-sm text-fg" /></label>{f.avatar && <button type="button" onClick={() => setF((old) => ({ ...old, avatar: '' }))} className="text-xs text-bad">Remove photo</button>}</div>
         <Input label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <Input label="Date of birth" type="date" value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />

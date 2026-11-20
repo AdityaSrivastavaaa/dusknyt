@@ -54,6 +54,17 @@ export function Logo({ className }) {
   const width = className?.includes('text-4xl') ? 'w-56' : className?.includes('text-3xl') ? 'w-48' : className?.includes('text-2xl') ? 'w-40' : 'w-36';
   return <img src={brandWordmark} alt="DUSKNYT" className={cx('inline-block h-auto max-w-full object-contain', width, className)} />;
 }
+export function EventBannerArt({ className }) {
+  return <div aria-hidden="true" className={cx('relative overflow-hidden bg-[#111116]', className)}>
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_15%,rgba(183,156,255,.42),transparent_48%),radial-gradient(ellipse_at_90%_90%,rgba(94,47,160,.45),transparent_52%)]" />
+    <div className="absolute -right-10 -top-16 h-52 w-52 rounded-full border border-brand/25" />
+    <div className="absolute -right-2 -top-8 h-36 w-36 rounded-full border border-brand/20" />
+    <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/50 to-transparent" />
+    <span className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/20 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.2em] text-white/80">DUSKNYT presents</span>
+    <Logo className="absolute bottom-4 right-4 !w-28 opacity-90 drop-shadow-lg" />
+    <span className="absolute bottom-4 left-4 text-[9px] font-medium uppercase tracking-[.16em] text-white/65">Nightlife · Guestlists · Experiences</span>
+  </div>;
+}
 
 /* ---------- form controls ---------- */
 const field = 'mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-fg outline-none focus:border-brand';

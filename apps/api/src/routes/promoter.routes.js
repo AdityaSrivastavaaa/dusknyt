@@ -11,6 +11,18 @@ const r = Router();
 const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true, address: true, images: true } }, event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } } } };
 const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
 
+function checkInOpensAt(offer) {
+  const match = String(offer.entryFrom || offer.event?.startTime || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let hour = Number(match[1]); const minute = Number(match[2] || 0); const meridiem = match[3]?.toUpperCase();
+  if (minute > 59 || hour > 23 || (meridiem && (hour < 1 || hour > 12))) return null;
+  if (meridiem) { hour %= 12; if (meridiem === 'PM') hour += 12; }
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(offer.date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day), hour, minute) - 330 * 60_000);
+}
+const withCheckInTime = (request) => ({ ...request, checkInOpensAt: checkInOpensAt(request.offer)?.toISOString() || null });
+
 r.get('/dashboard', wrap(async (req, res) => {
   const where = mine(req);
   const [fresh, confirmed, upcomingOffers, activeOffers] = await Promise.all([
@@ -56,6 +68,12 @@ r.post('/events', wrap(async (req, res) => {
     return res.json(existing);
   }
   res.status(201).json(await prisma.event.create({ data: { ...d, date, clubId: club.id } }));
+}));
+r.patch('/events/:id/banner', wrap(async (req, res) => {
+  const { poster } = parse(z.object({ poster: z.string().max(4_500_000).url().or(z.literal('')) }), req.body);
+  const event = await prisma.event.findFirst({ where: { id: req.params.id, offers: { some: { promoterId: req.promoter.id } } } });
+  if (!event) throw new ApiError(404, 'Event not found for this promoter');
+  res.json(await prisma.event.update({ where: { id: event.id }, data: { poster: poster || null } }));
 }));
 const offerBody = z.object({
   clubId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
@@ -117,7 +135,7 @@ r.get('/requests/:id', wrap(async (req, res) => {
   const g = await prisma.guestRequest.findFirst({ where: { id: req.params.id, ...mine(req) }, include: reqInclude });
   if (!g) throw new ApiError(404, 'Request not found');
   if (!g.seenAt) await prisma.guestRequest.update({ where: { id: g.id }, data: { seenAt: new Date() } });
-  res.json(g);
+  res.json(withCheckInTime(g));
 }));
 r.post('/requests/:id/decision', wrap(async (req, res) => {
   const d = parse(z.object({ action: z.enum(['ACCEPT', 'REJECT']), reason: z.string().optional(), note: z.string().max(300).optional() }), req.body);
@@ -149,7 +167,7 @@ r.get('/guestlist/events', wrap(async (req, res) => {
     const group = groups.get(key) || {
       key, eventId: offer.eventId, clubId: offer.clubId, club: offer.club,
       event: offer.event || { id: null, title: 'Guestlist', date: offer.date, startTime: offer.entryFrom, djName: null, genre: null, poster: null },
-      banner: offer.event?.poster || offer.club.images?.[0] || null,
+      banner: offer.event?.poster || null,
       offers: [], bookings: 0, confirmedBookings: 0, confirmedGuests: 0, pendingBookings: 0, pendingGuests: 0,
     };
     group.offers.push({ id: offer.id, offerType: offer.offerType, entryType: offer.entryType, entryTypes: offer.entryTypes, price: offer.price, entryFrom: offer.entryFrom, entryBefore: offer.entryBefore, inclusions: offer.inclusions, terms: offer.terms });
@@ -173,17 +191,22 @@ r.get('/guestlist/event-details', wrap(async (req, res) => {
   });
   if (!offers.length) throw new ApiError(404, 'Event guestlist not found');
   const requestRows = await prisma.guestRequest.findMany({ where: { offerId: { in: offers.map((offer) => offer.id) }, status: { in: ['CONFIRMED', 'PENDING'] } }, include: reqInclude, orderBy: { createdAt: 'asc' } });
-  res.json({ event: offers[0].event, club: offers[0].club, offers: offers.map(({ club, event, ...offer }) => offer), requests: requestRows });
+  res.json({ event: offers[0].event, club: offers[0].club, offers: offers.map(({ club, event, ...offer }) => offer), requests: requestRows.map(withCheckInTime) });
 }));
 r.get('/guestlist', wrap(async (req, res) => {
-  res.json(await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } }));
+  res.json((await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } })).map(withCheckInTime));
 }));
 r.post('/guestlist/:id/check-in', wrap(async (req, res) => {
   const request = await prisma.guestRequest.findFirst({ where: { id: req.params.id, ...mine(req) }, include: reqInclude });
   if (!request) throw new ApiError(404, 'Guestlist request not found');
   if (request.status !== 'CONFIRMED') throw new ApiError(400, 'Only confirmed guests can be checked in');
   if (request.checkedInAt) return res.json(request);
-  res.json(await prisma.guestRequest.update({ where: { id: request.id }, data: { checkedInAt: new Date() }, include: reqInclude }));
+  const opensAt = checkInOpensAt(request.offer);
+  if (opensAt && Date.now() < opensAt.getTime()) {
+    const time = opensAt.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' });
+    throw new ApiError(400, `Check-in opens at ${time} India time`);
+  }
+  res.json(withCheckInTime(await prisma.guestRequest.update({ where: { id: request.id }, data: { checkedInAt: new Date() }, include: reqInclude })));
 }));
 r.get('/guestlist/export', wrap(async (req, res) => {
   const where = guestlistWhere(req);

@@ -13,6 +13,9 @@ input, select, textarea, button { font: inherit; }
   input, select, textarea { font-size: 16px !important; }
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
 img, svg, video { max-width: 100%; }
 .app-shell { overflow-x: clip; min-height: 100vh; min-height: 100dvh; }
 .page-with-nav { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)); }

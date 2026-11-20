@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LifeBuoy, LogOut, ChevronDown } from 'lucide-react';
+import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LifeBuoy, LogOut, ChevronDown, Star } from 'lucide-react';
 import { Async, Header, Button, Input, Textarea, Select, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
 import { fmtDate, timeAgo } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
@@ -75,6 +75,13 @@ const MenuItem = ({ to, icon: Icon, label, onClick }) => {
 
 function LoginPrompt({ onLogin, message = 'Log in to view your account and saved items.' }) {
   return <div className="p-5"><Card className="text-center"><h2 className="font-semibold">Please log in</h2><p className="mt-2 text-sm text-muted">{message}</p><Button className="mt-4" onClick={onLogin}>Log in</Button></Card></div>;
+}
+
+function supportConversation(ticket, initialRole = 'USER') {
+  const messages = [...(ticket.messages || [])];
+  if (!messages.some((item) => item.senderRole !== 'ADMIN' && item.body === ticket.message)) messages.unshift({ id: 'legacy-user', senderRole: initialRole, body: ticket.message, createdAt: ticket.createdAt });
+  if (ticket.adminReply && !messages.some((item) => item.senderRole === 'ADMIN' && item.body === ticket.adminReply)) messages.push({ id: 'legacy-support', senderRole: 'ADMIN', senderName: 'DUSKNYT Support', body: ticket.adminReply, createdAt: ticket.updatedAt });
+  return messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
 export function Profile() {
@@ -161,6 +168,26 @@ export function SupportTickets() {
   const q = useQuery({ queryKey: ['support-tickets'], queryFn: () => http.get('/support'), enabled: !!token });
   if (!token) return <><Header back title="My Support Tickets" /><LoginPrompt message="Log in to view support ticket updates and replies." onLogin={() => nav('/login', { state: { from: '/support-tickets' } })} /></>;
   return <div><Header back title="My Support Tickets" sub="Track ticket progress and replies" /><div className="p-4"><Tabs tabs={[{ value: 'ALL', label: 'All' }, { value: 'OPEN', label: 'Open' }, { value: 'IN_PROGRESS', label: 'In Progress' }, { value: 'CLOSED', label: 'Closed' }]} value={tab} onChange={setTab} /></div><Async q={q} empty={<EmptyState title="No support tickets yet" text="Tickets you submit through Help & Support will appear here." />}>
-    {(list) => { const visible = tab === 'ALL' ? list : list.filter((ticket) => ticket.status === tab); return visible.length ? <div className="flex flex-col gap-3 px-4 pb-6">{visible.map((ticket) => <Card key={ticket.id} className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><p className="font-medium">{ticket.subject}</p></div><Badge s={ticket.status} /></div><p className="text-xs uppercase text-muted">{ticket.category.replaceAll('_', ' ')} · {timeAgo(ticket.updatedAt)}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p><p className="whitespace-pre-wrap text-sm text-muted">{ticket.message}</p>{ticket.adminReply && <div className="rounded-xl bg-brand/10 p-3"><p className="mb-1 text-xs font-semibold">DUSKNYT support replied</p><p className="whitespace-pre-wrap text-sm">{ticket.adminReply}</p></div>}</Card>)}</div> : <EmptyState title={`No ${tab === 'ALL' ? '' : `${tab.replace('_', ' ').toLowerCase()} `}tickets`} text="Tickets will appear here as you submit them and support updates their progress." />; }}
+    {(list) => { const visible = tab === 'ALL' ? list : list.filter((ticket) => ticket.status === tab); return visible.length ? <div className="flex flex-col gap-3 px-4 pb-6">{visible.map((ticket) => <Link key={ticket.id} to={`/support-tickets/${ticket.id}`} className="block"><Card className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><p className="font-medium">{ticket.subject}</p></div><Badge s={ticket.status} /></div><p className="text-xs uppercase text-muted">{ticket.category.replaceAll('_', ' ')} · Updated {timeAgo(ticket.updatedAt)}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p></Card></Link>)}</div> : <EmptyState title={`No ${tab === 'ALL' ? '' : `${tab.replace('_', ' ').toLowerCase()} `}tickets`} text="Tickets will appear here as you submit them and support updates their progress." />; }}
+  </Async></div>;
+}
+
+export function SupportTicketDetails() {
+  const { id } = useParams(); const nav = useNavigate(); const { token } = useAuth(); const qc = useQueryClient();
+  const [reply, setReply] = useState(''); const [rating, setRating] = useState(0); const [feedback, setFeedback] = useState(''); const [error, setError] = useState('');
+  const q = useQuery({ queryKey: ['support-ticket', id], queryFn: () => http.get(`/support/${id}`), enabled: !!token });
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['support-ticket', id] }); qc.invalidateQueries({ queryKey: ['support-tickets'] }); };
+  const send = useMutation({ mutationFn: () => http.post(`/support/${id}/messages`, { message: reply.trim() }), onSuccess: () => { setReply(''); setError(''); refresh(); }, onError: (e) => setError(errMsg(e)) });
+  const close = useMutation({ mutationFn: () => http.patch(`/support/${id}`, { status: 'CLOSED' }), onSuccess: refresh, onError: (e) => setError(errMsg(e)) });
+  const rate = useMutation({ mutationFn: () => http.post(`/support/${id}/rating`, { rating, ...(feedback.trim() && { feedback: feedback.trim() }) }), onSuccess: refresh, onError: (e) => setError(errMsg(e)) });
+  if (!token) return <><Header back title="Support Ticket" /><LoginPrompt message="Log in to view this support conversation." onLogin={() => nav('/login', { state: { from: `/support-tickets/${id}` } })} /></>;
+  return <div><Header back title="Ticket Conversation" sub={q.data?.ticketCode || 'Support ticket'} /><Async q={q} empty={<EmptyState title="Ticket not found" text="This support ticket may have been removed." />}>
+    {(ticket) => { const messages = supportConversation(ticket);
+      return <div className="space-y-4 px-4 pb-6 pt-3"><Card className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><h2 className="font-semibold">{ticket.subject}</h2></div><Badge s={ticket.status} /></div><p className="text-xs uppercase text-muted">{ticket.category.replaceAll('_', ' ')}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p></Card>
+        <section className="space-y-3"><h3 className="text-sm font-semibold">Conversation</h3>{messages.map((item) => { const isSupport = item.senderRole === 'ADMIN'; return <div key={item.id} className={`max-w-[90%] rounded-2xl border p-3 ${isSupport ? 'mr-auto border-brand/30 bg-brand/10' : 'ml-auto border-line bg-card'}`}><p className="mb-1 text-[11px] font-semibold">{isSupport ? 'DUSKNYT Support' : item.senderRole === 'PROMOTER' ? 'Promoter' : 'You'} · {timeAgo(item.createdAt)}</p><p className="whitespace-pre-wrap text-sm">{item.body}</p></div>; })}</section>
+        {error && <p className="text-xs text-bad">{error}</p>}
+        {ticket.status !== 'CLOSED' ? <><Textarea label="Send a reply" rows={4} maxLength={3000} value={reply} onChange={(e) => setReply(e.target.value)} /><Button loading={send.isPending} disabled={!reply.trim()} onClick={() => { setError(''); send.mutate(); }}>Send Reply</Button><Button variant="outline" loading={close.isPending} onClick={() => { setError(''); close.mutate(); }}>Close Ticket</Button></> : <Card className="space-y-3"><div><h3 className="font-semibold">{ticket.supportRating ? 'Your support rating' : 'Rate your support experience'}</h3><p className="text-xs text-muted">Your feedback helps us improve DUSKNYT support.</p></div>{ticket.supportRating ? <><div className="flex gap-1 text-brand">{Array.from({ length: 5 }, (_, i) => <Star key={i} size={20} className={i < ticket.supportRating ? 'fill-brand' : ''} />)}</div>{ticket.supportFeedback && <p className="text-sm text-muted">{ticket.supportFeedback}</p>}</> : <><div className="flex gap-2" role="radiogroup" aria-label="Rate support">{Array.from({ length: 5 }, (_, i) => <button key={i} type="button" role="radio" aria-checked={rating === i + 1} aria-label={`${i + 1} star${i ? 's' : ''}`} onClick={() => setRating(i + 1)} className={i < rating ? 'text-brand' : 'text-muted'}><Star size={28} className={i < rating ? 'fill-brand' : ''} /></button>)}</div><Textarea label="Feedback (optional)" rows={3} maxLength={500} value={feedback} onChange={(e) => setFeedback(e.target.value)} /><Button disabled={!rating} loading={rate.isPending} onClick={() => { setError(''); rate.mutate(); }}>Submit Rating</Button></>}</Card>}
+      </div>;
+    }}
   </Async></div>;
 }

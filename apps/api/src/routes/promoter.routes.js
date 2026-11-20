@@ -251,7 +251,7 @@ r.get('/support', wrap(async (req, res) => {
 }));
 r.post('/support', supportLimiter, wrap(async (req, res) => {
   const d = parse(z.object({ category: z.enum(['BOOKING', 'GUESTLIST_ENTRY', 'OFFER', 'ACCOUNT', 'OTHER']), guestRequestId: z.string().optional(), subject: z.string().trim().min(3).max(120), message: z.string().trim().min(10).max(3000) }), req.body);
-  res.status(201).json(await createSupportTicket(req.user.id, d));
+  res.status(201).json(await createSupportTicket(req.user.id, d, 'PROMOTER', req.user.name || 'Promoter', req.promoter.id));
 }));
 r.post('/change-password', wrap(async (req, res) => {
   const d = parse(z.object({ current: z.string().optional(), next: z.string().min(8) }), req.body);

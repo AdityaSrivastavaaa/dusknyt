@@ -54,6 +54,12 @@ enum SupportCategory {
   OTHER
 }
 
+enum TicketMessageSender {
+  USER
+  PROMOTER
+  ADMIN
+}
+
 model User {
   id                 String           @id @default(cuid())
   role               Role             @default(USER)
@@ -231,21 +237,37 @@ model Payout {
 }
 
 model Ticket {
-  id             String          @id @default(cuid())
-  ticketCode     String?         @unique
-  userId         String
-  guestRequestId String?
-  category       SupportCategory @default(OTHER)
-  subject        String
-  message        String
-  adminReply     String?
-  status         TicketStatus    @default(OPEN)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @default(now()) @updatedAt
-  user           User            @relation(fields: [userId], references: [id])
-  guestRequest   GuestRequest?   @relation(fields: [guestRequestId], references: [id], onDelete: SetNull)
+  id              String          @id @default(cuid())
+  ticketCode      String?         @unique
+  userId          String
+  guestRequestId  String?
+  category        SupportCategory @default(OTHER)
+  subject         String
+  message         String
+  adminReply      String?
+  supportRating   Int?
+  supportFeedback String?
+  supportRatedAt  DateTime?
+  status          TicketStatus    @default(OPEN)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
+  user            User            @relation(fields: [userId], references: [id])
+  guestRequest    GuestRequest?   @relation(fields: [guestRequestId], references: [id], onDelete: SetNull)
+  messages        TicketMessage[]
 
   @@index([userId, status])
+}
+
+model TicketMessage {
+  id         String              @id @default(cuid())
+  ticketId   String
+  senderRole TicketMessageSender
+  senderName String?
+  body       String
+  createdAt  DateTime            @default(now())
+  ticket     Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
 }
 
 model PromoterRating {

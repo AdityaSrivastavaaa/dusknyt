@@ -233,21 +233,28 @@ r.get('/notifications', wrap(async (req, res) => {
 }));
 r.get('/tickets', wrap(async (req, res) => {
   const where = req.query.status && req.query.status !== 'ALL' ? { status: req.query.status } : {};
-  res.json(await prisma.ticket.findMany({ where, include: { user: { select: { name: true, phone: true, email: true, role: true } }, ...supportTicketInclude }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
+  res.json(await prisma.ticket.findMany({ where, include: { user: { select: { name: true, phone: true, email: true, role: true } }, ...supportTicketInclude, messages: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
 }));
 r.patch('/tickets/:id', wrap(async (req, res) => {
   const d = parse(z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']).optional(), reply: z.string().trim().max(3000).optional() }), req.body);
   if (!d.status && d.reply === undefined) throw new ApiError(400, 'Update the ticket status or add a reply');
-  const existing = await prisma.ticket.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.ticket.findUnique({ where: { id: req.params.id }, include: { messages: { select: { id: true } }, user: { select: { name: true, role: true } } } });
   if (!existing) throw new ApiError(404, 'Support ticket not found');
   const updated = await prisma.$transaction(async (tx) => {
+    if (d.reply?.trim() && d.reply !== existing.adminReply && !existing.messages.length) {
+      await tx.ticketMessage.create({ data: { ticketId: existing.id, senderRole: existing.user.role === 'PROMOTER' ? 'PROMOTER' : 'USER', senderName: existing.user.name || (existing.user.role === 'PROMOTER' ? 'Promoter' : 'Guest'), body: existing.message, createdAt: existing.createdAt } });
+      if (existing.adminReply) await tx.ticketMessage.create({ data: { ticketId: existing.id, senderRole: 'ADMIN', senderName: 'DUSKNYT Support', body: existing.adminReply, createdAt: existing.updatedAt } });
+    }
     const ticket = await tx.ticket.update({ where: { id: existing.id }, data: { ...(d.status && { status: d.status }), ...(d.reply !== undefined && { adminReply: d.reply || null }) }, include: supportTicketInclude });
+    if (d.reply?.trim() && d.reply !== existing.adminReply) {
+      await tx.ticketMessage.create({ data: { ticketId: ticket.id, senderRole: 'ADMIN', senderName: 'DUSKNYT Support', body: d.reply } });
+    }
     if ((d.status && d.status !== existing.status) || (d.reply !== undefined && d.reply !== existing.adminReply)) {
       const code = ticket.ticketCode || ticket.id;
       const summary = d.reply !== undefined && d.reply !== existing.adminReply ? 'Support replied to your ticket' : `Support ticket ${code} updated`;
       await tx.notification.create({ data: { userId: existing.userId, title: summary, body: `Ticket ${code}: ${ticket.subject}. Check Help & Support in DUSKNYT for the latest update.` } });
     }
-    return ticket;
+    return tx.ticket.findUnique({ where: { id: ticket.id }, include: { ...supportTicketInclude, messages: { orderBy: { createdAt: 'asc' } } } });
   });
   res.json(updated);
 }));

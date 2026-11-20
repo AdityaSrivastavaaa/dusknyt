@@ -5,7 +5,7 @@ import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createRequest } from '../services/guestlist.js';
 import { promoterContactAvailableAt } from '../lib/offer-time.js';
-import { createSupportTicket, supportTicketInclude } from '../lib/support.js';
+import { createSupportTicket, supportTicketInclude, supportTicketDetailInclude } from '../lib/support.js';
 import { supportLimiter } from '../lib/rate-limit.js';
 
 const r = Router();
@@ -205,9 +205,46 @@ r.post('/notifications/read-all', ...auth, wrap(async (req, res) => {
 r.get('/support', ...auth, wrap(async (req, res) => {
   res.json(await prisma.ticket.findMany({ where: { userId: req.user.id }, include: supportTicketInclude, orderBy: { updatedAt: 'desc' }, take: 50 }));
 }));
+r.get('/support/:id', ...auth, wrap(async (req, res) => {
+  const ticket = await prisma.ticket.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: supportTicketDetailInclude });
+  if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  res.json(ticket);
+}));
 r.post('/support', ...auth, supportLimiter, wrap(async (req, res) => {
   const d = parse(z.object({ category: z.enum(['BOOKING', 'GUESTLIST_ENTRY', 'OFFER', 'ACCOUNT', 'OTHER']), guestRequestId: z.string().optional(), subject: z.string().trim().min(3).max(120), message: z.string().trim().min(10).max(3000) }), req.body);
   res.status(201).json(await createSupportTicket(req.user.id, d));
+}));
+r.post('/support/:id/messages', ...auth, supportLimiter, wrap(async (req, res) => {
+  const { message } = parse(z.object({ message: z.string().trim().min(1).max(3000) }), req.body);
+  const ticket = await prisma.ticket.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: { messages: { select: { id: true } } } });
+  if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  if (ticket.status === 'CLOSED') throw new ApiError(400, 'This ticket is closed. Submit a new ticket if you still need help.');
+  const created = await prisma.$transaction(async (tx) => {
+    if (!ticket.messages.length) {
+      await tx.ticketMessage.create({ data: { ticketId: ticket.id, senderRole: req.user.role === 'PROMOTER' ? 'PROMOTER' : 'USER', senderName: req.user.name || 'Guest', body: ticket.message, createdAt: ticket.createdAt } });
+      if (ticket.adminReply) await tx.ticketMessage.create({ data: { ticketId: ticket.id, senderRole: 'ADMIN', senderName: 'DUSKNYT Support', body: ticket.adminReply, createdAt: ticket.updatedAt } });
+    }
+    await tx.ticketMessage.create({ data: { ticketId: ticket.id, senderRole: 'USER', senderName: req.user.name || 'Guest', body: message } });
+    await tx.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
+    return tx.ticket.findUnique({ where: { id: ticket.id }, include: supportTicketDetailInclude });
+  });
+  res.status(201).json(created);
+}));
+r.patch('/support/:id', ...auth, wrap(async (req, res) => {
+  parse(z.object({ status: z.literal('CLOSED') }), req.body);
+  const ticket = await prisma.ticket.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  res.json(ticket.status === 'CLOSED' ? ticket : await prisma.ticket.update({ where: { id: ticket.id }, data: { status: 'CLOSED' }, include: supportTicketInclude }));
+}));
+r.post('/support/:id/rating', ...auth, wrap(async (req, res) => {
+  const d = parse(z.object({ rating: z.number().int().min(1).max(5), feedback: z.string().trim().max(500).optional() }), req.body);
+  const ticket = await prisma.ticket.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!ticket) throw new ApiError(404, 'Support ticket not found');
+  if (ticket.status !== 'CLOSED') throw new ApiError(400, 'Close this support ticket before rating your experience');
+  if (ticket.supportRating) throw new ApiError(409, 'You have already rated this support ticket');
+  const updated = await prisma.ticket.updateMany({ where: { id: ticket.id, userId: req.user.id, status: 'CLOSED', supportRating: null }, data: { supportRating: d.rating, supportFeedback: d.feedback || null, supportRatedAt: new Date() } });
+  if (!updated.count) throw new ApiError(409, 'You have already rated this support ticket');
+  res.json({ rating: d.rating, feedback: d.feedback || null });
 }));
 
 export default r;

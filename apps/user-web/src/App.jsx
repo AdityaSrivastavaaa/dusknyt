@@ -6,7 +6,7 @@ import { Home, Explore, SearchResults, Filters } from './pages/discovery';
 import { ClubDetails, EventSelect, ClubOffers, OfferDetails, AllOffers } from './pages/clubs';
 import { Login, Verify, ProfileSetup } from './pages/auth';
 import { GuestDetails, Review, Submitted, RequestStatus } from './pages/booking';
-import { Saved, MyGuestlists, Notifications, Profile, EditProfile, Settings, Help, SupportTickets } from './pages/account';
+import { Saved, MyGuestlists, Notifications, Profile, EditProfile, Settings, Help, SupportTickets, SupportTicketDetails } from './pages/account';
 
 const nav = [
   { to: '/', label: 'Home', icon: HomeIcon, end: true }, { to: '/explore', label: 'Explore', icon: Search },
@@ -25,6 +25,7 @@ export default function App() {
         <Route path="guestlists" element={<MyGuestlists />} />
         <Route path="saved" element={<Saved />} />
         <Route path="support-tickets" element={<SupportTickets />} />
+        <Route path="support-tickets/:id" element={<SupportTicketDetails />} />
         <Route path="profile" element={<Profile />} />
       </Route>
       <Route element={<Plain />}>

@@ -6,7 +6,7 @@ import { http } from './lib/api';
 import { Splash, Login } from './pages/auth';
 import { Dashboard, Analytics } from './pages/dashboard';
 import { MyOffers, CreateOffer, OfferDetail } from './pages/offers';
-import { Requests, RequestDetails, ReviewRequest, Guestlist } from './pages/requests';
+import { Requests, RequestDetails, ReviewRequest, Guestlist, GuestlistEvent } from './pages/requests';
 import { More, EditProfile, ChangePassword, Notifications, Help, About } from './pages/profile';
 import { useAuth } from '@dusknyt/ui';
 
@@ -37,6 +37,7 @@ export default function App() {
           <Route path="offers" element={<MyOffers />} />
           <Route path="requests" element={<Requests />} />
           <Route path="guestlist" element={<Guestlist />} />
+          <Route path="guestlist/event" element={<GuestlistEvent />} />
           <Route path="more" element={<More />} />
           <Route path="analytics" element={<Analytics />} />
         </Route>

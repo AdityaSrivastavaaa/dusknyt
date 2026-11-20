@@ -8,7 +8,7 @@ import { decide, analytics } from '../services/guestlist.js';
 // Mounted behind authenticate + authorize('PROMOTER') + loadPromoter.
 // EVERY query below is scoped to req.promoter.id — never trust ids from the client alone.
 const r = Router();
-const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true } }, event: { select: { id: true, title: true, date: true, startTime: true } } } } };
+const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true, address: true, images: true } }, event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } } } };
 const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
 
 r.get('/dashboard', wrap(async (req, res) => {
@@ -130,6 +130,51 @@ const guestlistWhere = (req) => {
   const date = req.query.eventId || (req.query.clubId && req.query.date) ? undefined : t === 'tonight' ? { gte: today, lt: addDays(today, 1) } : t === 'upcoming' ? { gte: addDays(today, 1) } : { lt: today };
   return { offer: { promoterId: req.promoter.id, ...(date && { date }), ...(req.query.eventId && { eventId: String(req.query.eventId) }), ...(req.query.clubId && { clubId: String(req.query.clubId) }), ...(req.query.date && !req.query.eventId && { date: { gte: startOfDay(String(req.query.date)), lt: addDays(startOfDay(String(req.query.date)), 1) } }) }, status: { in: ['CONFIRMED', 'PENDING'] } };
 };
+r.get('/guestlist/events', wrap(async (req, res) => {
+  const today = startOfDay(), tab = req.query.tab || 'tonight';
+  const date = tab === 'tonight' ? { gte: today, lt: addDays(today, 1) } : tab === 'upcoming' ? { gte: addDays(today, 1) } : { lt: today };
+  const offers = await prisma.offer.findMany({
+    where: { promoterId: req.promoter.id, date, status: { not: 'DRAFT' } },
+    include: {
+      club: { select: { id: true, name: true, area: true, address: true, images: true } },
+      event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true } },
+      requests: { where: { status: { in: ['CONFIRMED', 'PENDING'] } }, select: { guestCount: true, status: true } },
+    },
+    orderBy: { date: 'asc' },
+  });
+  const groups = new Map();
+  for (const offer of offers) {
+    const dateKey = offer.date.toISOString().slice(0, 10);
+    const key = offer.eventId || `${offer.clubId}:${dateKey}`;
+    const group = groups.get(key) || {
+      key, eventId: offer.eventId, clubId: offer.clubId, club: offer.club,
+      event: offer.event || { id: null, title: 'Guestlist', date: offer.date, startTime: offer.entryFrom, djName: null, genre: null, poster: null },
+      banner: offer.event?.poster || offer.club.images?.[0] || null,
+      offers: [], bookings: 0, confirmedBookings: 0, confirmedGuests: 0, pendingBookings: 0, pendingGuests: 0,
+    };
+    group.offers.push({ id: offer.id, offerType: offer.offerType, entryType: offer.entryType, entryTypes: offer.entryTypes, price: offer.price, entryFrom: offer.entryFrom, entryBefore: offer.entryBefore, inclusions: offer.inclusions, terms: offer.terms });
+    for (const request of offer.requests) {
+      group.bookings++;
+      if (request.status === 'CONFIRMED') { group.confirmedBookings++; group.confirmedGuests += request.guestCount; }
+      else { group.pendingBookings++; group.pendingGuests += request.guestCount; }
+    }
+    groups.set(key, group);
+  }
+  res.json([...groups.values()]);
+}));
+r.get('/guestlist/event-details', wrap(async (req, res) => {
+  const eventId = req.query.eventId ? String(req.query.eventId) : undefined;
+  const clubId = req.query.clubId ? String(req.query.clubId) : undefined;
+  const from = req.query.date ? startOfDay(String(req.query.date)) : undefined;
+  if (!eventId && !(clubId && from)) throw new ApiError(400, 'Select an event or club date');
+  const offers = await prisma.offer.findMany({
+    where: { promoterId: req.promoter.id, status: { not: 'DRAFT' }, ...(eventId && { eventId }), ...(clubId && { clubId }), ...(from && { date: { gte: from, lt: addDays(from, 1) } }) },
+    include: { club: true, event: true }, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  });
+  if (!offers.length) throw new ApiError(404, 'Event guestlist not found');
+  const requestRows = await prisma.guestRequest.findMany({ where: { offerId: { in: offers.map((offer) => offer.id) }, status: { in: ['CONFIRMED', 'PENDING'] } }, include: reqInclude, orderBy: { createdAt: 'asc' } });
+  res.json({ event: offers[0].event, club: offers[0].club, offers: offers.map(({ club, event, ...offer }) => offer), requests: requestRows });
+}));
 r.get('/guestlist', wrap(async (req, res) => {
   res.json(await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } }));
 }));

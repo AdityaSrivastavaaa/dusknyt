@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LogOut, ChevronDown } from 'lucide-react';
+import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LifeBuoy, LogOut, ChevronDown } from 'lucide-react';
 import { Async, Header, Button, Input, Textarea, Select, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
 import { fmtDate, timeAgo } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
@@ -60,7 +60,7 @@ export function Notifications() {
       <Header back title="Notifications" />
       <Async q={q} empty={<EmptyState title="No notifications" />}>{(list) => (<>
         <div className="divide-y divide-line">{list.map((n) => (
-          <button key={n.id} onClick={() => n.requestId ? nav(`/requests/${n.requestId}`) : n.title.toLowerCase().includes('support') ? nav('/help') : null} className="flex w-full gap-3 px-4 py-3 text-left">
+          <button key={n.id} onClick={() => n.requestId ? nav(`/requests/${n.requestId}`) : n.title.toLowerCase().includes('support') ? nav('/support-tickets') : null} className="flex w-full gap-3 px-4 py-3 text-left">
             <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.isRead ? 'bg-line' : 'bg-brand')} />
             <div><p className="text-sm font-medium">{n.title}</p><p className="text-xs text-muted">{n.body}</p><p className="mt-0.5 text-[11px] text-muted">{timeAgo(n.createdAt)}</p></div></button>))}</div>
         <button className="mx-auto mt-4 block text-sm text-brand" onClick={() => readAll.mutate()}>Mark all as read</button></>)}</Async>
@@ -90,7 +90,7 @@ export function Profile() {
           <Link to="/profile/edit" className="shrink-0 rounded-xl border border-line px-3 py-2 text-xs font-semibold text-brand">Edit</Link>
         </Card>
         <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Your activity</h2><Card className="overflow-hidden p-0"><MenuItem to="/guestlists" icon={Heart} label="My Bookings" /><MenuItem to="/saved" icon={Bookmark} label="Saved Clubs & Offers" /><MenuItem to="/notifications" icon={Bell} label="Notifications" /></Card></section>
-        <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Account & support</h2><Card className="overflow-hidden p-0"><MenuItem to="/settings" icon={Cog} label="Settings" /><MenuItem to="/help" icon={HelpCircle} label="Help & Support" /></Card></section>
+        <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Account & support</h2><Card className="overflow-hidden p-0"><MenuItem to="/settings" icon={Cog} label="Settings" /><MenuItem to="/help" icon={HelpCircle} label="Help & Support" /><MenuItem to="/support-tickets" icon={LifeBuoy} label="My Support Tickets" /></Card></section>
         <Card className="overflow-hidden p-0"><MenuItem icon={LogOut} label="Log out" onClick={() => { logout(); nav('/login'); }} /></Card>
       </div>
     </div>
@@ -139,9 +139,8 @@ const FAQ = [
 ];
 export function Help() {
   const { token } = useAuth(); const qc = useQueryClient(); const [open, setOpen] = useState(null); const [category, setCategory] = useState('BOOKING'); const [guestRequestId, setGuestRequestId] = useState(''); const [f, setF] = useState({ subject: '', message: '' }); const [msg, setMsg] = useState('');
-  const tickets = useQuery({ queryKey: ['support-tickets'], queryFn: () => http.get('/support'), enabled: !!token });
   const bookings = useQuery({ queryKey: ['support-bookings'], queryFn: () => http.get('/guestlist', { limit: 50 }), enabled: !!token });
-  const send = useMutation({ mutationFn: () => http.post('/support', { ...f, category, ...(guestRequestId && { guestRequestId }) }), onSuccess: (ticket) => { setMsg(`Ticket ${ticket.ticketCode || ticket.id} submitted. You can track replies below.`); setF({ subject: '', message: '' }); setGuestRequestId(''); qc.invalidateQueries({ queryKey: ['support-tickets'] }); }, onError: (e) => setMsg(errMsg(e)) });
+  const send = useMutation({ mutationFn: () => http.post('/support', { ...f, category, ...(guestRequestId && { guestRequestId }) }), onSuccess: (ticket) => { setMsg(`Ticket ${ticket.ticketCode || ticket.id} submitted. You can track replies in My Support Tickets.`); setF({ subject: '', message: '' }); setGuestRequestId(''); qc.invalidateQueries({ queryKey: ['support-tickets'] }); }, onError: (e) => setMsg(errMsg(e)) });
   return (
     <div>
       <Header back title="Help & Support" />
@@ -150,10 +149,18 @@ export function Help() {
           {open === i && <p className="px-4 pb-4 text-xs text-muted">{a}</p>}</div>))}</div>
       <div className="space-y-3 p-4"><h3 className="text-sm font-semibold">Report an issue</h3>
         {token ? (<><Select label="What do you need help with?" value={category} onChange={(e) => setCategory(e.target.value)} options={[{ value: 'BOOKING', label: 'Booking or request' }, { value: 'GUESTLIST_ENTRY', label: 'Arrival or guestlist entry' }, { value: 'OFFER', label: 'Offer details' }, { value: 'ACCOUNT', label: 'Account or login' }, { value: 'OTHER', label: 'Something else' }]} /><Select label="Related booking (optional)" value={guestRequestId} onChange={(e) => setGuestRequestId(e.target.value)} options={[{ value: '', label: 'No booking selected' }, ...(bookings.data || []).map((r) => ({ value: r.id, label: `${r.code} · ${r.offer.club.name} · ${fmtDate(r.offer.date)}` }))]} /><Input label="Subject" maxLength={120} value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /><Textarea label="How can we help?" rows={5} maxLength={3000} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} /><p className="text-[11px] text-muted">Do not include passwords, payment details, or other sensitive information.</p>
-          {msg && <p className="text-xs text-muted">{msg}</p>}<Button loading={send.isPending} disabled={f.subject.trim().length < 3 || f.message.trim().length < 10} onClick={() => { setMsg(''); send.mutate(); }}>Submit support ticket</Button></>) : <p className="text-xs text-muted">Log in to submit and track a support ticket.</p>}
+          {msg && <p className="text-xs text-muted">{msg}</p>}<Button loading={send.isPending} disabled={f.subject.trim().length < 3 || f.message.trim().length < 10} onClick={() => { setMsg(''); send.mutate(); }}>Submit support ticket</Button><Link to="/support-tickets" className="block text-center text-xs font-semibold text-brand">View my support tickets</Link></>) : <p className="text-xs text-muted">Log in to submit and track a support ticket.</p>}
         <a href="mailto:support@dusknyt.com" className="block text-center text-xs text-brand">Email support instead</a></div>
-      {token && <section className="space-y-3 px-4 pb-6"><div><h3 className="text-sm font-semibold">Your support tickets</h3><p className="text-xs text-muted">Track status and replies from the DUSKNYT team.</p></div><Async q={tickets} empty={<EmptyState title="No support tickets yet" text="Tickets you submit will appear here." />}>{(list) => list.map((ticket) => <Card key={ticket.id} className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><p className="font-medium">{ticket.subject}</p></div><Badge s={ticket.status} /></div><p className="text-xs text-muted">{ticket.category.replaceAll('_', ' ')} · {timeAgo(ticket.updatedAt)}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p><p className="whitespace-pre-wrap text-sm text-muted">{ticket.message}</p>{ticket.adminReply && <div className="rounded-xl bg-brand/10 p-3"><p className="mb-1 text-xs font-semibold">DUSKNYT support replied</p><p className="whitespace-pre-wrap text-sm">{ticket.adminReply}</p></div>}</Card>)}</Async></section>}
       <p className="pb-6 text-center text-xs text-muted">We're here to help!</p>
     </div>
   );
+}
+
+export function SupportTickets() {
+  const { token } = useAuth(); const nav = useNavigate(); const [tab, setTab] = useState('ALL');
+  const q = useQuery({ queryKey: ['support-tickets'], queryFn: () => http.get('/support'), enabled: !!token });
+  if (!token) return <><Header back title="My Support Tickets" /><LoginPrompt message="Log in to view support ticket updates and replies." onLogin={() => nav('/login', { state: { from: '/support-tickets' } })} /></>;
+  return <div><Header back title="My Support Tickets" sub="Track ticket progress and replies" /><div className="p-4"><Tabs tabs={[{ value: 'ALL', label: 'All' }, { value: 'OPEN', label: 'Open' }, { value: 'IN_PROGRESS', label: 'In Progress' }, { value: 'CLOSED', label: 'Closed' }]} value={tab} onChange={setTab} /></div><Async q={q} empty={<EmptyState title="No support tickets yet" text="Tickets you submit through Help & Support will appear here." />}>
+    {(list) => { const visible = tab === 'ALL' ? list : list.filter((ticket) => ticket.status === tab); return visible.length ? <div className="flex flex-col gap-3 px-4 pb-6">{visible.map((ticket) => <Card key={ticket.id} className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><p className="font-medium">{ticket.subject}</p></div><Badge s={ticket.status} /></div><p className="text-xs uppercase text-muted">{ticket.category.replaceAll('_', ' ')} · {timeAgo(ticket.updatedAt)}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p><p className="whitespace-pre-wrap text-sm text-muted">{ticket.message}</p>{ticket.adminReply && <div className="rounded-xl bg-brand/10 p-3"><p className="mb-1 text-xs font-semibold">DUSKNYT support replied</p><p className="whitespace-pre-wrap text-sm">{ticket.adminReply}</p></div>}</Card>)}</div> : <EmptyState title={`No ${tab === 'ALL' ? '' : `${tab.replace('_', ' ').toLowerCase()} `}tickets`} text="Tickets will appear here as you submit them and support updates their progress." />; }}
+  </Async></div>;
 }

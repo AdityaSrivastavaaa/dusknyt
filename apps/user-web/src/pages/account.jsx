@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LogOut, ChevronDown } from 'lucide-react';
-import { Async, Header, Button, Input, Textarea, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
+import { Async, Header, Button, Input, Textarea, Select, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
 import { fmtDate, timeAgo } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';

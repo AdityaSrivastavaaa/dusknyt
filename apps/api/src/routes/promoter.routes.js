@@ -8,24 +8,32 @@ import { decide, analytics } from '../services/guestlist.js';
 // Mounted behind authenticate + authorize('PROMOTER') + loadPromoter.
 // EVERY query below is scoped to req.promoter.id — never trust ids from the client alone.
 const r = Router();
-const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { name: true, area: true } } } } };
+const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true } }, event: { select: { id: true, title: true, date: true, startTime: true } } } } };
 const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
 
 r.get('/dashboard', wrap(async (req, res) => {
   const where = mine(req);
-  const [fresh, confirmed, events, activeOffers] = await Promise.all([
+  const [fresh, confirmed, upcomingOffers, activeOffers] = await Promise.all([
     prisma.guestRequest.count({ where: { ...where, status: 'PENDING', seenAt: null } }),
     prisma.guestRequest.count({ where: { ...where, status: 'CONFIRMED' } }),
     prisma.offer.findMany({
       where: { promoterId: req.promoter.id, status: 'ACTIVE', date: { gte: startOfDay() } },
-      include: { club: { select: { name: true, images: true } }, _count: { select: { requests: true } } }, orderBy: { date: 'asc' }, take: 6,
+      include: { club: { select: { id: true, name: true, images: true } }, event: { select: { id: true, title: true } }, _count: { select: { requests: true } } }, orderBy: { date: 'asc' },
     }),
     prisma.offer.count({ where: { promoterId: req.promoter.id, status: 'ACTIVE', date: { gte: startOfDay() } } }),
   ]);
+  const upcomingByEvent = new Map();
+  for (const offer of upcomingOffers) {
+    const date = offer.date.toISOString().slice(0, 10);
+    const key = offer.eventId || `${offer.clubId}:${date}`;
+    const group = upcomingByEvent.get(key) || { id: key, eventId: offer.eventId, clubId: offer.club.id, club: offer.club.name, event: offer.event?.title || 'Guestlist', date, requests: 0 };
+    group.requests += offer._count.requests;
+    upcomingByEvent.set(key, group);
+  }
   res.json({
     name: req.user.name || req.promoter.brand, newRequests: fresh, confirmed,
     activeOffers,
-    upcoming: events.map((o) => ({ id: o.id, club: o.club.name, image: o.club.images[0], date: o.date, entryFrom: o.entryFrom, entryBefore: o.entryBefore, requests: o._count.requests })),
+    upcoming: [...upcomingByEvent.values()],
   });
 }));
 
@@ -119,8 +127,8 @@ r.post('/requests/:id/decision', wrap(async (req, res) => {
 /* ----- guestlist (confirmed + pending for tonight/upcoming/past) ----- */
 const guestlistWhere = (req) => {
   const today = startOfDay(), t = req.query.tab || 'tonight';
-  const date = t === 'tonight' ? { gte: today, lt: addDays(today, 1) } : t === 'upcoming' ? { gte: addDays(today, 1) } : { lt: today };
-  return { offer: { promoterId: req.promoter.id, date }, status: { in: ['CONFIRMED', 'PENDING'] } };
+  const date = req.query.eventId || (req.query.clubId && req.query.date) ? undefined : t === 'tonight' ? { gte: today, lt: addDays(today, 1) } : t === 'upcoming' ? { gte: addDays(today, 1) } : { lt: today };
+  return { offer: { promoterId: req.promoter.id, ...(date && { date }), ...(req.query.eventId && { eventId: String(req.query.eventId) }), ...(req.query.clubId && { clubId: String(req.query.clubId) }), ...(req.query.date && !req.query.eventId && { date: { gte: startOfDay(String(req.query.date)), lt: addDays(startOfDay(String(req.query.date)), 1) } }) }, status: { in: ['CONFIRMED', 'PENDING'] } };
 };
 r.get('/guestlist', wrap(async (req, res) => {
   res.json(await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } }));
@@ -133,9 +141,16 @@ r.post('/guestlist/:id/check-in', wrap(async (req, res) => {
   res.json(await prisma.guestRequest.update({ where: { id: request.id }, data: { checkedInAt: new Date() }, include: reqInclude }));
 }));
 r.get('/guestlist/export', wrap(async (req, res) => {
-  const rows = await prisma.guestRequest.findMany({ where: guestlistWhere(req), include: reqInclude, orderBy: { createdAt: 'asc' } });
+  const where = guestlistWhere(req);
+  where.offer = {
+    ...where.offer,
+    ...(req.query.eventId && { eventId: String(req.query.eventId) }),
+    ...(req.query.clubId && { clubId: String(req.query.clubId) }),
+    ...(req.query.date && (() => { const from = startOfDay(String(req.query.date)); return { date: { gte: from, lt: addDays(from, 1) } }; })()),
+  };
+  const rows = await prisma.guestRequest.findMany({ where, include: reqInclude, orderBy: { createdAt: 'asc' } });
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = ['Code,Name,Phone,Club,Guests,Entry,Arrive Before,Status,Checked In At', ...rows.map((g) => [g.code, g.user.name, g.user.phone, g.offer.club.name, g.guestCount, g.offer.entryType, g.offer.entryBefore, g.status, g.checkedInAt?.toISOString() || ''].map(esc).join(','))].join('\n');
+  const csv = ['Code,Name,Phone,Club,Event,Date,Guests,Entry,Arrive Before,Status,Checked In At', ...rows.map((g) => [g.code, g.user.name, g.user.phone, g.offer.club.name, g.offer.event?.title || '', g.offer.date.toISOString().slice(0, 10), g.guestCount, g.offer.entryType, g.offer.entryBefore, g.status, g.checkedInAt?.toISOString() || ''].map(esc).join(','))].join('\n');
   res.type('text/csv').attachment('guestlist.csv').send(csv);
 }));
 

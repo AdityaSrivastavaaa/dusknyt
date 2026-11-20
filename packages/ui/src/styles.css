@@ -8,6 +8,10 @@ html, body, #root { width: 100%; min-height: 100%; overflow-x: clip; }
 html { min-height: -webkit-fill-available; }
 body { @apply bg-bg font-sans text-fg antialiased; min-height: 100vh; min-height: 100dvh; background-image: radial-gradient(ellipse at 15% -5%, rgb(183 156 255 / .13), transparent 40%), radial-gradient(ellipse at 100% 50%, rgb(183 156 255 / .06), transparent 38%); overscroll-behavior-y: contain; -webkit-text-size-adjust: 100%; }
 input, select, textarea, button { font: inherit; }
+/* iOS Safari zooms the page when a focused form control uses text smaller than 16px. */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
 .no-scrollbar::-webkit-scrollbar { display: none; }
 img, svg, video { max-width: 100%; }
 .app-shell { overflow-x: clip; min-height: 100vh; min-height: 100dvh; }

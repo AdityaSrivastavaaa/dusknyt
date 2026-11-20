@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Async, Header, Button, Tabs, Badge, Avatar, Card, Select, Textarea, EmptyState, cx } from '@dusknyt/ui';
 import { REJECT_REASONS, fmtDate, timeAgo } from '@dusknyt/shared';
@@ -74,23 +74,51 @@ export function ReviewRequest() {
 
 export function Guestlist() {
   const [tab, setTab] = useState('tonight');
-  const qc = useQueryClient(); const [checkInError, setCheckInError] = useState('');
-  const q = useQuery({ queryKey: ['guestlist', tab], queryFn: () => http.get('/promoter/guestlist', { tab }) });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const eventId = searchParams.get('eventId'); const clubId = searchParams.get('clubId'); const date = searchParams.get('date');
+  const scoped = Boolean(eventId || (clubId && date));
+  const qc = useQueryClient(); const [checkInError, setCheckInError] = useState(''); const [collapsed, setCollapsed] = useState({});
+  const scope = { ...(eventId && { eventId }), ...(!eventId && clubId && { clubId }), ...(!eventId && date && { date }) };
+  const q = useQuery({ queryKey: ['guestlist', tab, eventId, clubId, date], queryFn: () => http.get('/promoter/guestlist', { tab, ...scope }) });
   const checkIn = useMutation({ mutationFn: (id) => http.post(`/promoter/guestlist/${id}/check-in`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['guestlist'] }); qc.invalidateQueries({ queryKey: ['request'] }); }, onError: (e) => setCheckInError(errMsg(e)) });
-  const exportCsv = async () => {
-    const res = await http.raw.get('/promoter/guestlist/export', { params: { tab }, responseType: 'blob' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = `guestlist-${tab}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  const exportCsv = async (filter = {}, label = tab) => {
+    const res = await http.raw.get('/promoter/guestlist/export', { params: { tab, ...filter }, responseType: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = `guestlist-${label}.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
   return (
     <div>
-      <Header title="Guestlist" />
-      <div className="p-4"><Tabs tabs={[{ value: 'tonight', label: 'Tonight' }, { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>
+      <Header title={scoped ? (q.data?.[0]?.offer?.event?.title || 'Event Guestlist') : 'Guestlist'} sub={scoped && q.data?.[0] ? `${q.data[0].offer.club.name} · ${fmtDate(q.data[0].offer.event?.date || q.data[0].offer.date)}` : undefined} right={scoped && <button onClick={() => { setSearchParams({}); setCollapsed({}); }} className="text-xs font-semibold text-brand">All events</button>} />
+      {!scoped && <div className="p-4"><Tabs tabs={[{ value: 'tonight', label: 'Tonight' }, { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>}
       <Async q={q} empty={<EmptyState title="No guests" text="Confirmed and pending guests for this period appear here." />}>{(list) => (<>
         {checkInError && <p className="mx-4 mb-3 rounded-xl border border-bad/30 bg-bad/10 p-3 text-xs text-bad">{checkInError}</p>}
-        <div className="space-y-3 px-4">{list.map((g) => (<Card key={g.id} className="space-y-3 p-3"><div className="flex min-w-0 items-start gap-3"><Avatar src={g.user.avatar} name={g.user.name} />
-          <div className="min-w-0 flex-1"><p className="truncate font-medium">{g.user.name}</p><p className="text-xs text-muted">{g.offer.club.name} · {g.guestCount} guest{g.guestCount === 1 ? '' : 's'}</p><p className="text-xs text-muted">{g.offer.entryType} Entry · arrive by {g.offer.entryBefore}</p><p className="mt-1 break-words text-xs">{(g.guests || []).map((guest) => guest.name).filter(Boolean).join(', ')}</p></div><Badge s={g.status} /></div>
-          {g.status === 'CONFIRMED' && (g.checkedInAt ? <p className="rounded-lg bg-ok/10 px-3 py-2 text-xs text-ok">Entered · {new Date(g.checkedInAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p> : <Button className="!py-2.5" loading={checkIn.isPending && checkIn.variables === g.id} disabled={checkIn.isPending} onClick={() => { setCheckInError(''); checkIn.mutate(g.id); }}>Mark Group Entered</Button>)}</Card>))}</div>
-        <div className="p-4"><Button onClick={exportCsv}>Export Guestlist</Button></div></>)}</Async>
+        {(() => {
+          const grouped = new Map();
+          for (const request of list) {
+            const eventDate = (request.offer.event?.date || request.offer.date).slice(0, 10);
+            const key = request.offer.event?.id || `${request.offer.club.id}:${eventDate}`;
+            const group = grouped.get(key) || { key, eventId: request.offer.event?.id, clubId: request.offer.club.id, club: request.offer.club.name, event: request.offer.event?.title || 'Guestlist', date: eventDate, requests: [] };
+            group.requests.push(request); grouped.set(key, group);
+          }
+          const groups = [...grouped.values()].sort((a, b) => a.date.localeCompare(b.date));
+          return <>
+            <div className="space-y-4 px-4">{groups.map((group) => {
+              const isCollapsed = collapsed[group.key];
+              const filters = group.eventId ? { eventId: group.eventId } : { clubId: group.clubId, date: group.date };
+              const guests = group.requests.reduce((n, request) => n + request.guestCount, 0);
+              return <Card key={group.key} className="overflow-hidden p-0"><div className="flex items-center gap-2 p-3">
+                <button type="button" aria-expanded={!isCollapsed} onClick={() => setCollapsed((old) => ({ ...old, [group.key]: !old[group.key] }))} className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold uppercase tracking-wide text-brand">{group.club}</span><span className="mt-0.5 block truncate font-semibold">{group.event}</span><span className="mt-0.5 block text-xs text-muted">{fmtDate(group.date)} · {group.requests.length} booking{group.requests.length === 1 ? '' : 's'} · {guests} guests</span></span><span className="shrink-0 text-xs text-muted">{isCollapsed ? 'Show' : 'Hide'}</span></button>
+                <Button variant="outline" className="!w-auto shrink-0 !px-3 !py-2 text-xs" onClick={() => exportCsv(filters, `${group.club}-${group.date}`)}>Export</Button>
+              </div>
+              {!isCollapsed && <div className="divide-y divide-line border-t border-line px-3">{group.requests.map((g) => <div key={g.id} className="space-y-2 py-3"><div className="flex min-w-0 items-start gap-3"><Avatar src={g.user.avatar} name={g.user.name} />
+                <div className="min-w-0 flex-1"><Link to={`/requests/${g.id}`} className="block truncate font-medium">{g.user.name} <span className="text-xs font-normal text-brand">· View request</span></Link><p className="text-xs text-muted">{g.guestCount} guest{g.guestCount === 1 ? '' : 's'} · {g.offer.entryType} · arrive by {g.offer.entryBefore}</p><p className="mt-1 break-words text-xs">{(g.guests || []).map((guest) => guest.name).filter(Boolean).join(', ')}</p></div><Badge s={g.status} /></div>
+                {g.status === 'CONFIRMED' && (g.checkedInAt ? <p className="rounded-lg bg-ok/10 px-3 py-2 text-xs text-ok">Entered · {new Date(g.checkedInAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p> : <Button className="!py-2.5" loading={checkIn.isPending && checkIn.variables === g.id} disabled={checkIn.isPending} onClick={() => { setCheckInError(''); checkIn.mutate(g.id); }}>Mark Group Entered</Button>)}
+                {g.status === 'PENDING' && <Link to={`/requests/${g.id}/review`} className="block"><Button variant="outline" className="!py-2.5">Review Request</Button></Link>}
+              </div>)}</div>}</Card>;
+            })}</div>
+            {!scoped && <div className="p-4"><Button variant="outline" onClick={() => exportCsv({}, `all-${tab}`)}>Export All {tab} Guestlist</Button></div>}
+          </>;
+        })()}
+      </>)}</Async>
     </div>
   );
 }

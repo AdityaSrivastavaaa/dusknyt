@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, Search, SlidersHorizontal, ChevronDown } from 'lucide-react';
@@ -9,7 +9,40 @@ import { useStore } from '../store';
 import { ClubCard } from '../components';
 
 const Section = ({ title, children }) => <section className="mt-5"><h2 className="mb-2 px-4 text-sm font-semibold uppercase tracking-wide">{title}</h2>{children}</section>;
-const Row = ({ clubs }) => <div className="no-scrollbar flex gap-3 overflow-x-auto px-4">{clubs.map((c) => <ClubCard key={c.id} club={c} compact />)}</div>;
+
+function HighlightCarousel({ clubs = [] }) {
+  const track = useRef(null); const scrollTimer = useRef(null);
+  const looped = clubs.length > 1 ? [clubs[clubs.length - 1], ...clubs, clubs[0]] : clubs;
+  const centerAt = (index, behavior = 'auto') => {
+    const el = track.current; const card = el?.children[index];
+    if (!el || !card) return;
+    el.scrollTo({ left: card.offsetLeft - (el.clientWidth - card.clientWidth) / 2, behavior });
+  };
+  useEffect(() => {
+    if (clubs.length > 1) centerAt(1);
+    return () => clearTimeout(scrollTimer.current);
+  }, [clubs]);
+  const onScroll = () => {
+    clearTimeout(scrollTimer.current);
+    if (clubs.length < 2) return;
+    scrollTimer.current = setTimeout(() => {
+      const el = track.current;
+      if (!el) return;
+      const center = el.scrollLeft + el.clientWidth / 2;
+      let nearest = 0, distance = Infinity;
+      [...el.children].forEach((card, index) => {
+        const d = Math.abs(card.offsetLeft + card.clientWidth / 2 - center);
+        if (d < distance) { nearest = index; distance = d; }
+      });
+      if (nearest === 0) centerAt(clubs.length);
+      else if (nearest === clubs.length + 1) centerAt(1);
+    }, 180);
+  };
+  if (!clubs.length) return null;
+  return <div ref={track} onScroll={onScroll} className="no-scrollbar relative flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9%] pb-2">
+    {looped.map((club, index) => <ClubCard key={`${index}-${club.id}`} club={club} featured />)}
+  </div>;
+}
 
 export function Home() {
   const city = useStore((s) => s.city); const nav = useNavigate();
@@ -23,8 +56,8 @@ export function Home() {
       </div>
       <button onClick={() => nav('/search')} className="mx-4 mt-4 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-muted"><Search size={16} />Search clubs, events, experiences…</button>
       <Async q={q} empty={<EmptyState title="No clubs yet" text="We're adding venues in your city soon." />}>{(d) => (<>
-        <Section title="Tonight's Highlights"><Row clubs={d.highlights} /></Section>
-        <Section title="Trending Tonight"><Row clubs={d.trending} /></Section>
+        <Section title="Today's Highlights"><HighlightCarousel clubs={d.highlights} /></Section>
+        <Section title="Trending Tonight"><div className="space-y-3 px-4">{d.trending.map((club) => <ClubCard key={club.id} club={club} list />)}</div></Section>
       </>)}</Async>
     </div>
   );

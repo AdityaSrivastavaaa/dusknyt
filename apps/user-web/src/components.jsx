@@ -17,11 +17,11 @@ export function SaveButton({ clubId, offerId, className }) {
   );
 }
 
-export function ClubCard({ club, compact }) {
+export function ClubCard({ club, compact, list, featured }) {
   return (
-    <Link to={`/clubs/${club.id}`} className={cx('block overflow-hidden rounded-2xl border border-line bg-card', compact && 'w-40 shrink-0')}>
-      <Img src={club.images?.[0]} name={club.name} className={compact ? 'h-24 w-full' : 'h-36 w-full'} />
-      <div className="p-3">
+    <Link to={`/clubs/${club.id}`} className={cx('block min-w-0 overflow-hidden rounded-2xl border border-line bg-card', compact && 'w-40 shrink-0', list && 'flex items-center gap-3 p-3', featured && 'w-[82%] max-w-[360px] shrink-0 snap-center')}>
+      <Img src={club.images?.[0]} name={club.name} className={list ? 'h-20 w-24 shrink-0 rounded-xl' : featured ? 'h-44 w-full sm:h-52' : compact ? 'h-24 w-full' : 'h-36 w-full'} />
+      <div className={list ? 'min-w-0 flex-1 p-0' : 'min-w-0 p-3'}>
         <div className="flex items-center justify-between"><h3 className="truncate font-semibold">{club.name}</h3>
           <span className="flex items-center gap-0.5 text-xs text-warn"><Star size={12} className="fill-warn" />{club.rating}</span></div>
         <p className="flex items-center gap-1 truncate text-xs text-muted"><MapPin size={11} />{club.area || club.address}</p>

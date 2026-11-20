@@ -138,6 +138,8 @@ model Offer {
   price       Int            @default(0)
   entryFrom   String         @default("9:00 PM")
   entryBefore String         @default("9:00 PM")
+  contactPhone String?
+  shareContact Boolean      @default(false)
   limitedSlots Boolean       @default(false)
   inclusions  String[]
   terms       String?

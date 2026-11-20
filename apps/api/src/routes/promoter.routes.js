@@ -4,23 +4,20 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '../lib/http.js';
 import { decide, analytics } from '../services/guestlist.js';
+import { offerEntryStartsAt } from '../lib/offer-time.js';
 
 // Mounted behind authenticate + authorize('PROMOTER') + loadPromoter.
 // EVERY query below is scoped to req.promoter.id — never trust ids from the client alone.
 const r = Router();
 const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true, address: true, images: true } }, event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } } } };
 const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
+const normalizeContactPhone = (value) => {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 10 ? `+91${digits}` : `${value.trim().startsWith('+') ? '+' : ''}${digits}`;
+};
 
-function checkInOpensAt(offer) {
-  const match = String(offer.entryFrom || offer.event?.startTime || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
-  if (!match) return null;
-  let hour = Number(match[1]); const minute = Number(match[2] || 0); const meridiem = match[3]?.toUpperCase();
-  if (minute > 59 || hour > 23 || (meridiem && (hour < 1 || hour > 12))) return null;
-  if (meridiem) { hour %= 12; if (meridiem === 'PM') hour += 12; }
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(offer.date);
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return new Date(Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day), hour, minute) - 330 * 60_000);
-}
+const checkInOpensAt = offerEntryStartsAt;
 const withCheckInTime = (request) => ({ ...request, checkInOpensAt: checkInOpensAt(request.offer)?.toISOString() || null });
 
 r.get('/dashboard', wrap(async (req, res) => {
@@ -79,6 +76,8 @@ const offerBody = z.object({
   clubId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
   entryTypes: z.array(z.string()).min(1).default([]),
   price: z.coerce.number().int().min(0).default(0), entryFrom: z.string().default('9:00 PM'), entryBefore: z.string().default('11:00 PM'), limitedSlots: z.boolean().default(false),
+  contactPhone: z.string().trim().max(25).optional().or(z.literal('')).refine((phone) => !phone || (/^[+\d\s()-]+$/.test(phone) && phone.replace(/\D/g, '').length >= 10 && phone.replace(/\D/g, '').length <= 15), 'Enter a valid contact number'),
+  shareContact: z.boolean().default(false),
   inclusions: z.array(z.string()).default([]), terms: z.string().optional(), description: z.string().optional(),
   status: z.enum(['ACTIVE', 'DRAFT', 'UPCOMING']).default('ACTIVE'),
 });
@@ -99,7 +98,7 @@ r.post('/offers', wrap(async (req, res) => {
   if (!club) throw new ApiError(400, 'Invalid club');
   if (d.eventId && !await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id } })) throw new ApiError(400, 'Event does not belong to the selected club');
   const entryTypes = d.entryTypes.length ? d.entryTypes : [d.entryType];
-  res.status(201).json(await prisma.offer.create({ data: { ...d, entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
+  res.status(201).json(await prisma.offer.create({ data: { ...d, contactPhone: normalizeContactPhone(d.contactPhone), entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
 }));
 r.get('/offers/:id', wrap(async (req, res) => {
   const o = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id }, include: { club: true, event: true, _count: { select: { requests: true } } } });
@@ -111,7 +110,7 @@ r.put('/offers/:id', wrap(async (req, res) => {
   const own = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id } });
   if (!own) throw new ApiError(404, 'Offer not found');
   const { clubId, ...rest } = d; // club cannot be changed after creation
-  res.json(await prisma.offer.update({ where: { id: own.id }, data: { ...rest, ...(d.entryTypes?.length && { entryType: d.entryTypes.join(', ') }), ...(d.date && { date: new Date(d.date) }) } }));
+  res.json(await prisma.offer.update({ where: { id: own.id }, data: { ...rest, ...(d.contactPhone !== undefined && { contactPhone: normalizeContactPhone(d.contactPhone) }), ...(d.entryTypes?.length && { entryType: d.entryTypes.join(', ') }), ...(d.date && { date: new Date(d.date) }) } }));
 }));
 r.patch('/offers/:id/status', wrap(async (req, res) => {
   const { status } = parse(z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'DRAFT']) }), req.body);

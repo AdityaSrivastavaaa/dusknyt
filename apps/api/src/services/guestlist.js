@@ -32,7 +32,7 @@ export async function decide(id, action, { reason, note, actor, promoterId }) {
   await notify(
     r.userId,
     to === 'CONFIRMED' ? "You're confirmed!" : 'Request not accepted',
-    to === 'CONFIRMED' ? `Your request for ${r.offer.club.name} is confirmed. Show your entry pass at the door.` : `Your request for ${r.offer.club.name} was not accepted: ${data.rejectReason}`,
+    to === 'CONFIRMED' ? `Your promoter guestlist booking for ${r.offer.club.name} is confirmed. Check your DUSKNYT booking for arrival instructions and promoter contact closer to entry.` : `Your request for ${r.offer.club.name} was not accepted: ${data.rejectReason}`,
     r.id,
   );
   await logActivity(actor, `Request ${r.code} ${to.toLowerCase()}`, 'request', r.id);

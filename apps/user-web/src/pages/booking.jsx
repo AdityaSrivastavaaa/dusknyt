@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, X, Minus, Plus, Clock, Circle } from 'lucide-react';
+import { Check, X, Minus, Plus, Clock, Circle, Phone, MessageCircle } from 'lucide-react';
 import { Async, Header, Button, Input, Textarea, Card, Badge, cx, useAuth } from '@dusknyt/ui';
 import { formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
@@ -74,8 +74,16 @@ export function Submitted() {
 }
 
 export function RequestStatus() {
-  const { id } = useParams(); const nav = useNavigate();
-  const q = useQuery({ queryKey: ['gl', id], queryFn: () => http.get(`/guestlist/${id}`), refetchInterval: (c) => (c.state.data?.status === 'PENDING' ? 15000 : false) });
+  const { id } = useParams(); const nav = useNavigate(); const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['gl', id], queryFn: () => http.get(`/guestlist/${id}`), refetchOnWindowFocus: true, refetchInterval: (c) => (c.state.data?.status === 'PENDING' ? 15000 : false) });
+  useEffect(() => {
+    const availableAt = q.data?.contactAvailableAt ? new Date(q.data.contactAvailableAt).getTime() : null;
+    if (q.data?.status !== 'CONFIRMED' || q.data?.promoterContact || !availableAt) return undefined;
+    const refresh = () => { if (Date.now() >= availableAt) qc.invalidateQueries({ queryKey: ['gl', id] }); };
+    const timer = setTimeout(refresh, Math.max(0, availableAt - Date.now()) + 250);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [id, q.data?.status, q.data?.contactAvailableAt, q.data?.promoterContact, qc]);
   return (
     <div>
       <Header back title="Request Status" sub={q.data?.code} />
@@ -85,12 +93,13 @@ export function RequestStatus() {
           <Step active title="Under Review" sub="Promoter will confirm soon" /><Step title="Confirmation" sub="Awaiting" /></ol></Card>}
         {r.status === 'CONFIRMED' && (<div className="text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full border-2 border-ok text-ok"><Check size={28} /></div>
           <h2 className="mt-2 text-xl font-bold">You're Confirmed!</h2><p className="text-xs text-muted">Enjoy your night</p>
-          {r.qrCode && <img src={r.qrCode} alt="Entry pass QR" className="mx-auto mt-4 h-56 w-56 rounded-2xl bg-white p-2" />}<p className="mt-1 text-xs text-muted">{r.code}</p></div>)}
+          {r.qrCode && <img src={r.qrCode} alt="DUSKNYT booking reference QR" className="mx-auto mt-4 h-56 w-56 rounded-2xl bg-white p-2" />}<p className="mt-1 text-xs text-muted">Booking reference · {r.code}</p></div>)}
         {(r.status === 'REJECTED' || r.status === 'EXPIRED') && (<div className="text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full border-2 border-bad text-bad"><X size={28} /></div>
           <h2 className="mt-2 text-xl font-bold">{r.status === 'EXPIRED' ? 'Request Expired' : 'Request Not Accepted'}</h2>
           {r.rejectReason && <Card className="mt-4 text-left"><p className="text-xs text-muted">Reason</p><p className="text-sm">{r.rejectReason}</p></Card>}
           <div className="mt-4"><Button onClick={() => nav(`/clubs/${r.offer.club.id}/offers`)}>View Other Offers</Button></div></div>)}
         <Card className="divide-y divide-line py-2"><Row k="Promoter" v={r.offer.promoter.brand} /><Row k="Club" v={r.offer.club.name} /><Row k="Date" v={fmtDate(r.offer.date)} /><Row k="Entry" v={`${r.offer.entryType} · ${r.guestCount} guest(s)`} /><Row k="Guestlist entry" v={`${r.offer.entryFrom || '9:00 PM'}–${r.offer.entryBefore}`} /></Card>
+        {r.status === 'CONFIRMED' && <Card className="space-y-3"><div><h2 className="font-semibold">Arrival contact</h2><p className="mt-1 text-xs text-muted">This booking is with the promoter, not a club-issued ticket. Contact the promoter to confirm where and how to join their guestlist.</p></div>{r.promoterContact?.phone ? <div className="grid grid-cols-2 gap-2"><a href={`tel:${r.promoterContact.phone}`} className="flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-3 text-sm font-semibold text-white"><Phone size={16} />Call promoter</a><a href={`https://wa.me/${r.promoterContact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi, I have DUSKNYT guestlist booking ${r.code} for ${r.offer.club.name} on ${fmtDate(r.offer.date)}. Could you share the agreed guestlist meeting point?`)}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-line px-3 py-3 text-sm font-semibold"><MessageCircle size={16} />WhatsApp</a></div> : r.contactAvailableAt ? <p className="rounded-xl bg-brand/10 p-3 text-sm text-muted">The promoter’s number will appear here from {new Date(r.contactAvailableAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} India time, one hour before the entry window.</p> : <p className="rounded-xl bg-card p-3 text-sm text-muted">The promoter has not shared a contact number for this offer. Check the offer details for the arrival instructions.</p>}</Card>}
       </div>)}</Async>
     </div>
   );

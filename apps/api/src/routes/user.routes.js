@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '../lib/http.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createRequest } from '../services/guestlist.js';
+import { promoterContactAvailableAt } from '../lib/offer-time.js';
 
 const r = Router();
 const auth = [authenticate, authorize('USER')];
@@ -111,6 +112,21 @@ r.put('/me', ...auth, wrap(async (req, res) => {
 
 /* ---------- guestlist requests ---------- */
 const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
+const requestDetailInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, user: { select: { phone: true } } } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
+function withPromoterContact(request, now = Date.now()) {
+  const { offer, ...rest } = request;
+  const { contactPhone, shareContact, promoter, ...publicOffer } = offer;
+  const phone = contactPhone || promoter.user?.phone || null;
+  const availableAt = shareContact && phone ? promoterContactAvailableAt(offer) : null;
+  const released = request.status === 'CONFIRMED' && availableAt && now >= availableAt.getTime();
+  const { user: _promoterUser, ...publicPromoter } = promoter;
+  return {
+    ...rest,
+    offer: { ...publicOffer, promoter: publicPromoter },
+    contactAvailableAt: availableAt?.toISOString() || null,
+    promoterContact: released ? { phone } : null,
+  };
+}
 r.post('/guestlist', ...auth, wrap(async (req, res) => {
   if (!req.user.name) throw new ApiError(400, 'Complete your profile first');
   const d = parse(z.object({
@@ -129,9 +145,9 @@ r.get('/guestlist', ...auth, wrap(async (req, res) => {
   res.json(await prisma.guestRequest.findMany({ where, include: reqInclude, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
 }));
 r.get('/guestlist/:id', ...auth, wrap(async (req, res) => {
-  const g = await prisma.guestRequest.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: reqInclude });
+  const g = await prisma.guestRequest.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: requestDetailInclude });
   if (!g) throw new ApiError(404, 'Request not found');
-  res.json(g);
+  res.json(withPromoterContact(g));
 }));
 
 /* ---------- saved ---------- */

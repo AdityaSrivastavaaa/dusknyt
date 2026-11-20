@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState } from '@dusknyt/ui';
+import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState, useAuth } from '@dusknyt/ui';
 import { ENTRY_TYPES, OFFER_TYPES, OFFER_PERK_GROUPS, formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
@@ -24,10 +24,10 @@ export function MyOffers() {
 }
 
 export function CreateOffer() {
-  const nav = useNavigate(); const qc = useQueryClient(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
+  const nav = useNavigate(); const qc = useQueryClient(); const { user } = useAuth(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
   const [customPerk, setCustomPerk] = useState('');
   const clubs = useQuery({ queryKey: ['p-clubs'], queryFn: () => http.get('/promoter/clubs') });
-  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', eventBannerExisting: false, entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', limitedSlots: false, date: '', inclusions: [], terms: '' });
+  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', eventBannerExisting: false, entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', contactPhone: '', shareContact: false, limitedSlots: false, date: '', inclusions: [], terms: '' });
   const club = clubs.data?.find((c) => c.id === f.clubId);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const create = useMutation({
@@ -78,6 +78,7 @@ export function CreateOffer() {
           <Select label="Offer type" value={f.offerType} onChange={set('offerType')} options={OFFER_TYPES} />
           {['Cover Charge', 'Stag Entry'].includes(f.offerType) && <Input label="Price (₹)" type="number" min="0" value={f.price} onChange={set('price')} />}
           <div className="grid grid-cols-2 gap-3"><Input label="Guestlist entry starts" value={f.entryFrom} onChange={set('entryFrom')} placeholder="10:00 PM" /><Input label="Guestlist entry ends" value={f.entryBefore} onChange={set('entryBefore')} placeholder="11:45 PM" /></div>
+          <Card className="space-y-3"><div><p className="text-sm font-semibold">Arrival contact</p><p className="text-xs text-muted">Guests with confirmed bookings can see this number one hour before this offer’s entry window.</p></div><Input label="Contact phone (optional)" type="tel" inputMode="tel" value={f.contactPhone} onChange={set('contactPhone')} placeholder={`Use account number ${user?.phone || ''}`} /><label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={f.shareContact} onChange={(e) => setF((old) => ({ ...old, shareContact: e.target.checked }))} className="mt-0.5 accent-brand" /><span>Share this number with confirmed guests so they can coordinate arrival. Leave phone blank to use my promoter login number. My guestlist booking is not a club-issued ticket.</span></label></Card>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.limitedSlots} onChange={(e) => setF({ ...f, limitedSlots: e.target.checked })} className="accent-brand" />Limited slots</label>
           <Button disabled={!f.clubId || !f.date || !f.entryTypes.length || f.eventTitle.trim().length < 2} onClick={() => setStep(2)}>Next</Button>
         </>) : (<>
@@ -97,15 +98,19 @@ export function CreateOffer() {
 }
 
 export function OfferDetail() {
-  const { id } = useParams(); const qc = useQueryClient();
+  const { id } = useParams(); const qc = useQueryClient(); const { user } = useAuth();
+  const [contactPhone, setContactPhone] = useState(''); const [shareContact, setShareContact] = useState(false); const [contactMessage, setContactMessage] = useState('');
   const q = useQuery({ queryKey: ['offer', id], queryFn: () => http.get(`/promoter/offers/${id}`) });
+  useEffect(() => { if (q.data) { setContactPhone(q.data.contactPhone || ''); setShareContact(Boolean(q.data.shareContact)); } }, [q.data?.id, q.data?.contactPhone, q.data?.shareContact]);
   const set = useMutation({ mutationFn: (status) => http.patch(`/promoter/offers/${id}/status`, { status }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['offer', id] }); qc.invalidateQueries({ queryKey: ['offers'] }); } });
+  const saveContact = useMutation({ mutationFn: () => http.put(`/promoter/offers/${id}`, { contactPhone, shareContact }), onSuccess: () => { setContactMessage('Arrival contact saved.'); qc.invalidateQueries({ queryKey: ['offer', id] }); qc.invalidateQueries({ queryKey: ['offers'] }); }, onError: (e) => setContactMessage(errMsg(e)) });
   return (
     <div>
       <Header back title="Offer Details" />
       <Async q={q}>{(o) => (<div className="space-y-4 p-4">
         <Card><div className="flex justify-between"><p className="text-lg font-bold">{o.club.name}</p><Badge s={o.status} /></div><p className="text-sm text-muted">{fmtDate(o.date)} · {o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="mt-2 text-3xl font-black">{formatINR(o.price)}</p><p className="text-xs text-muted">Entry {o.entryFrom}–{o.entryBefore} · {o._count.requests} requests {o.limitedSlots ? '· Limited slots' : ''}</p></Card>
         {o.inclusions.length > 0 && <Card><p className="mb-1 text-xs text-muted">Included</p>{o.inclusions.map((x) => <p key={x} className="text-sm">• {x}</p>)}</Card>}
+        <Card className="space-y-3"><div><p className="font-semibold">Arrival contact</p><p className="text-xs text-muted">The number is shared only with confirmed guests, one hour before entry starts. Blank uses your promoter login number ({user?.phone || 'not available'}).</p></div><Input label="Contact phone (optional)" type="tel" inputMode="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="Use promoter login number" /><label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={shareContact} onChange={(e) => setShareContact(e.target.checked)} className="mt-0.5 accent-brand" /><span>Share this number with confirmed guests for arrival coordination. The booking is not a club-issued ticket.</span></label>{contactMessage && <p className={`text-xs ${contactMessage.includes('saved') ? 'text-ok' : 'text-bad'}`}>{contactMessage}</p>}<Button variant="outline" loading={saveContact.isPending} onClick={() => { setContactMessage(''); saveContact.mutate(); }}>Save Arrival Contact</Button></Card>
         {o.status === 'INACTIVE' && <p className="text-center text-sm text-muted">Offer expired or inactive.</p>}
         {['INACTIVE', 'DRAFT'].includes(o.status) ? <Button loading={set.isPending} onClick={() => set.mutate('ACTIVE')}>Activate Offer</Button> : <Button variant="danger" loading={set.isPending} onClick={() => set.mutate('INACTIVE')}>Deactivate Offer</Button>}
       </div>)}</Async>

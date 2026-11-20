@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -47,38 +46,47 @@ enum TicketStatus {
   CLOSED
 }
 
+enum SupportCategory {
+  BOOKING
+  GUESTLIST_ENTRY
+  OFFER
+  ACCOUNT
+  OTHER
+}
 
 model User {
-  id            String         @id @default(cuid())
-  role          Role           @default(USER)
-  phone         String?        @unique
-  email         String?        @unique
-  passwordHash  String?
-  mustChangePassword Boolean @default(false)
-  name          String?
-  dob           DateTime?
-  avatar        String?
-  status        EntityStatus   @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  promoter      Promoter?
-  requests      GuestRequest[]
-  saved         Saved[]
-  notifications Notification[]
-  tickets       Ticket[]
+  id                 String           @id @default(cuid())
+  role               Role             @default(USER)
+  phone              String?          @unique
+  email              String?          @unique
+  passwordHash       String?
+  mustChangePassword Boolean          @default(false)
+  name               String?
+  dob                DateTime?
+  avatar             String?
+  status             EntityStatus     @default(ACTIVE)
+  createdAt          DateTime         @default(now())
+  promoter           Promoter?
+  requests           GuestRequest[]
+  saved              Saved[]
+  notifications      Notification[]
+  tickets            Ticket[]
+  promoterRatings    PromoterRating[]
 }
 
 model Promoter {
-  id        String       @id @default(cuid())
-  userId    String       @unique
+  id        String           @id @default(cuid())
+  userId    String           @unique
   brand     String
   company   String?
   instagram String?
   logo      String?
-  status    EntityStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    EntityStatus     @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   offers    Offer[]
   payouts   Payout[]
+  ratings   PromoterRating[]
 }
 
 model City {
@@ -127,58 +135,63 @@ model Event {
 }
 
 model Offer {
-  id          String         @id @default(cuid())
-  clubId      String
-  eventId     String?
-  promoterId  String
-  title       String
-  entryType   String
-  entryTypes  String[]       @default([])
-  offerType   String
-  price       Int            @default(0)
-  entryFrom   String         @default("9:00 PM")
-  entryBefore String         @default("9:00 PM")
+  id           String         @id @default(cuid())
+  clubId       String
+  eventId      String?
+  promoterId   String
+  title        String
+  entryType    String
+  entryTypes   String[]       @default([])
+  offerType    String
+  price        Int            @default(0)
+  entryFrom    String         @default("9:00 PM")
+  entryBefore  String         @default("9:00 PM")
   contactPhone String?
-  shareContact Boolean      @default(false)
-  limitedSlots Boolean       @default(false)
-  inclusions  String[]
-  terms       String?
-  description String?
-  status      OfferStatus    @default(ACTIVE)
-  date        DateTime
-  createdAt   DateTime       @default(now())
-  club        Club           @relation(fields: [clubId], references: [id])
-  event       Event?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  promoter    Promoter       @relation(fields: [promoterId], references: [id])
-  requests    GuestRequest[]
-  saved       Saved[]
+  shareContact Boolean        @default(false)
+  limitedSlots Boolean        @default(false)
+  inclusions   String[]
+  terms        String?
+  description  String?
+  status       OfferStatus    @default(ACTIVE)
+  date         DateTime
+  createdAt    DateTime       @default(now())
+  club         Club           @relation(fields: [clubId], references: [id])
+  event        Event?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  promoter     Promoter       @relation(fields: [promoterId], references: [id])
+  requests     GuestRequest[]
+  saved        Saved[]
 
   @@index([clubId, status])
   @@index([promoterId, status])
 }
 
 model GuestRequest {
-  id           String        @id @default(cuid())
-  code         String        @unique
-  userId       String
-  offerId      String
-  guestCount   Int
-  guests       Json
-  note         String?
-  status       RequestStatus @default(PENDING)
-  rejectReason String?
-  promoterNote String?
-  qrCode       String?
-  checkedInAt  DateTime?
-  reviewedById String?
-  seenAt       DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  user         User          @relation(fields: [userId], references: [id])
-  offer        Offer         @relation(fields: [offerId], references: [id])
+  id                 String          @id @default(cuid())
+  code               String          @unique
+  userId             String
+  offerId            String
+  guestCount         Int
+  guests             Json
+  note               String?
+  status             RequestStatus   @default(PENDING)
+  rejectReason       String?
+  promoterNote       String?
+  qrCode             String?
+  checkedInAt        DateTime?
+  reviewedById       String?
+  seenAt             DateTime?
+  ratingPromptAt     DateTime?
+  ratingPromptSentAt DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  user               User            @relation(fields: [userId], references: [id])
+  offer              Offer           @relation(fields: [offerId], references: [id])
+  rating             PromoterRating?
+  tickets            Ticket[]
 
   @@index([offerId, status])
   @@index([userId, status])
+  @@index([status, ratingPromptAt, ratingPromptSentAt])
 }
 
 model Saved {
@@ -218,13 +231,36 @@ model Payout {
 }
 
 model Ticket {
-  id        String       @id @default(cuid())
-  userId    String
-  subject   String
-  message   String
-  status    TicketStatus @default(OPEN)
-  createdAt DateTime     @default(now())
-  user      User         @relation(fields: [userId], references: [id])
+  id             String          @id @default(cuid())
+  ticketCode     String?         @unique
+  userId         String
+  guestRequestId String?
+  category       SupportCategory @default(OTHER)
+  subject        String
+  message        String
+  adminReply     String?
+  status         TicketStatus    @default(OPEN)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @default(now()) @updatedAt
+  user           User            @relation(fields: [userId], references: [id])
+  guestRequest   GuestRequest?   @relation(fields: [guestRequestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+}
+
+model PromoterRating {
+  id             String       @id @default(cuid())
+  guestRequestId String       @unique
+  userId         String
+  promoterId     String
+  rating         Int
+  comment        String?
+  createdAt      DateTime     @default(now())
+  guestRequest   GuestRequest @relation(fields: [guestRequestId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoter       Promoter     @relation(fields: [promoterId], references: [id], onDelete: Cascade)
+
+  @@index([promoterId, createdAt])
 }
 
 model ActivityLog {

@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, publicUser } from '../lib/http.js';
 import { decide, analytics } from '../services/guestlist.js';
 import { logActivity } from '../services/notify.js';
+import { supportTicketInclude } from '../lib/support.js';
 
 // Mounted behind authenticate + authorize('ADMIN','SUPER_ADMIN').
 const r = Router();
@@ -232,11 +233,23 @@ r.get('/notifications', wrap(async (req, res) => {
 }));
 r.get('/tickets', wrap(async (req, res) => {
   const where = req.query.status && req.query.status !== 'ALL' ? { status: req.query.status } : {};
-  res.json(await prisma.ticket.findMany({ where, include: { user: { select: { name: true, phone: true } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
+  res.json(await prisma.ticket.findMany({ where, include: { user: { select: { name: true, phone: true, email: true, role: true } }, ...supportTicketInclude }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
 }));
 r.patch('/tickets/:id', wrap(async (req, res) => {
-  const { status } = parse(z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']) }), req.body);
-  res.json(await prisma.ticket.update({ where: { id: req.params.id }, data: { status } }));
+  const d = parse(z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']).optional(), reply: z.string().trim().max(3000).optional() }), req.body);
+  if (!d.status && d.reply === undefined) throw new ApiError(400, 'Update the ticket status or add a reply');
+  const existing = await prisma.ticket.findUnique({ where: { id: req.params.id } });
+  if (!existing) throw new ApiError(404, 'Support ticket not found');
+  const updated = await prisma.$transaction(async (tx) => {
+    const ticket = await tx.ticket.update({ where: { id: existing.id }, data: { ...(d.status && { status: d.status }), ...(d.reply !== undefined && { adminReply: d.reply || null }) }, include: supportTicketInclude });
+    if ((d.status && d.status !== existing.status) || (d.reply !== undefined && d.reply !== existing.adminReply)) {
+      const code = ticket.ticketCode || ticket.id;
+      const summary = d.reply !== undefined && d.reply !== existing.adminReply ? 'Support replied to your ticket' : `Support ticket ${code} updated`;
+      await tx.notification.create({ data: { userId: existing.userId, title: summary, body: `Ticket ${code}: ${ticket.subject}. Check Help & Support in DUSKNYT for the latest update.` } });
+    }
+    return ticket;
+  });
+  res.json(updated);
 }));
 
 export default r;

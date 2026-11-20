@@ -5,6 +5,8 @@ import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createRequest } from '../services/guestlist.js';
 import { promoterContactAvailableAt } from '../lib/offer-time.js';
+import { createSupportTicket, supportTicketInclude } from '../lib/support.js';
+import { supportLimiter } from '../lib/rate-limit.js';
 
 const r = Router();
 const auth = [authenticate, authorize('USER')];
@@ -112,7 +114,7 @@ r.put('/me', ...auth, wrap(async (req, res) => {
 
 /* ---------- guestlist requests ---------- */
 const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
-const requestDetailInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, user: { select: { phone: true } } } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
+const requestDetailInclude = { rating: true, offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, user: { select: { phone: true } } } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
 function withPromoterContact(request, now = Date.now()) {
   const { offer, ...rest } = request;
   const { contactPhone, shareContact, promoter, ...publicOffer } = offer;
@@ -149,6 +151,24 @@ r.get('/guestlist/:id', ...auth, wrap(async (req, res) => {
   if (!g) throw new ApiError(404, 'Request not found');
   res.json(withPromoterContact(g));
 }));
+r.post('/guestlist/:id/rating', ...auth, wrap(async (req, res) => {
+  const d = parse(z.object({ rating: z.number().int().min(1).max(5), comment: z.string().trim().max(500).optional() }), req.body);
+  const request = await prisma.guestRequest.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: { offer: { select: { promoterId: true, promoter: { select: { userId: true, brand: true } }, club: { select: { name: true } } } }, rating: true } });
+  if (!request) throw new ApiError(404, 'Booking not found');
+  if (request.status !== 'CONFIRMED' || !request.ratingPromptSentAt) throw new ApiError(400, 'Rating will be available the morning after your confirmed event');
+  if (request.rating) throw new ApiError(409, 'You have already rated this promoter');
+  try {
+    const rating = await prisma.$transaction(async (tx) => {
+      const created = await tx.promoterRating.create({ data: { guestRequestId: request.id, userId: req.user.id, promoterId: request.offer.promoterId, rating: d.rating, comment: d.comment || null } });
+      await tx.notification.create({ data: { userId: request.offer.promoter.userId, title: 'New promoter rating', body: `A guest rated your ${request.offer.club.name} guestlist ${d.rating} out of 5.` } });
+      return created;
+    });
+    res.status(201).json(rating);
+  } catch (error) {
+    if (error.code === 'P2002') throw new ApiError(409, 'You have already rated this promoter');
+    throw error;
+  }
+}));
 
 /* ---------- saved ---------- */
 r.get('/saved/ids', ...auth, wrap(async (req, res) => {
@@ -182,9 +202,12 @@ r.post('/notifications/read-all', ...auth, wrap(async (req, res) => {
   await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });
   res.json({ ok: true });
 }));
-r.post('/support', ...auth, wrap(async (req, res) => {
-  const d = parse(z.object({ subject: z.string().min(3), message: z.string().min(5) }), req.body);
-  res.status(201).json(await prisma.ticket.create({ data: { ...d, userId: req.user.id } }));
+r.get('/support', ...auth, wrap(async (req, res) => {
+  res.json(await prisma.ticket.findMany({ where: { userId: req.user.id }, include: supportTicketInclude, orderBy: { updatedAt: 'desc' }, take: 50 }));
+}));
+r.post('/support', ...auth, supportLimiter, wrap(async (req, res) => {
+  const d = parse(z.object({ category: z.enum(['BOOKING', 'GUESTLIST_ENTRY', 'OFFER', 'ACCOUNT', 'OTHER']), guestRequestId: z.string().optional(), subject: z.string().trim().min(3).max(120), message: z.string().trim().min(10).max(3000) }), req.body);
+  res.status(201).json(await createSupportTicket(req.user.id, d));
 }));
 
 export default r;

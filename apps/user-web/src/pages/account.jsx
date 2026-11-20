@@ -60,7 +60,7 @@ export function Notifications() {
       <Header back title="Notifications" />
       <Async q={q} empty={<EmptyState title="No notifications" />}>{(list) => (<>
         <div className="divide-y divide-line">{list.map((n) => (
-          <button key={n.id} onClick={() => n.requestId && nav(`/requests/${n.requestId}`)} className="flex w-full gap-3 px-4 py-3 text-left">
+          <button key={n.id} onClick={() => n.requestId ? nav(`/requests/${n.requestId}`) : n.title.toLowerCase().includes('support') ? nav('/help') : null} className="flex w-full gap-3 px-4 py-3 text-left">
             <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.isRead ? 'bg-line' : 'bg-brand')} />
             <div><p className="text-sm font-medium">{n.title}</p><p className="text-xs text-muted">{n.body}</p><p className="mt-0.5 text-[11px] text-muted">{timeAgo(n.createdAt)}</p></div></button>))}</div>
         <button className="mx-auto mt-4 block text-sm text-brand" onClick={() => readAll.mutate()}>Mark all as read</button></>)}</Async>
@@ -131,13 +131,17 @@ export function Settings() {
 }
 
 const FAQ = [
-  ['How does the guestlist work?', 'Pick a club and offer, send a request, and the promoter reviews it. Once confirmed you get a QR entry pass to show at the door.'],
-  ['How long does confirmation take?', 'Most requests are answered within a few hours. Requests for past events expire automatically.'],
-  ['Booking & cancellation', 'Requests can be tracked under My Guestlists. If your plans change, simply do not use the pass and send a new request later.'],
+  ['How does a guestlist booking work?', 'Choose a promoter offer and send a request. Your booking is confirmed only after the promoter accepts it. A DUSKNYT confirmation is not a club-issued ticket or a guarantee of admission.'],
+  ['How do I find the promoter at the venue?', 'For offers where the promoter shares a contact number, Call and WhatsApp options appear on your confirmed booking one hour before the entry window. Contact them for the agreed guestlist meeting point and arrival instructions.'],
+  ['Where can I see my booking status?', 'Open My Bookings to see pending requests, confirmed bookings, guest names, event details, and any promoter arrival contact.'],
+  ['I need to change or cancel my request', 'Guestlist requests cannot currently be edited in DUSKNYT. Submit a support ticket with your booking code and tell us what needs to change.'],
+  ['When can I rate a promoter?', 'The morning after your confirmed event, DUSKNYT sends an in-app prompt. You can rate the promoter from the booking details page.'],
 ];
 export function Help() {
-  const { token } = useAuth(); const [open, setOpen] = useState(null); const [f, setF] = useState({ subject: '', message: '' }); const [msg, setMsg] = useState('');
-  const send = useMutation({ mutationFn: () => http.post('/support', f), onSuccess: () => { setMsg('Thanks! Our team will get back to you.'); setF({ subject: '', message: '' }); }, onError: (e) => setMsg(errMsg(e)) });
+  const { token } = useAuth(); const qc = useQueryClient(); const [open, setOpen] = useState(null); const [category, setCategory] = useState('BOOKING'); const [guestRequestId, setGuestRequestId] = useState(''); const [f, setF] = useState({ subject: '', message: '' }); const [msg, setMsg] = useState('');
+  const tickets = useQuery({ queryKey: ['support-tickets'], queryFn: () => http.get('/support'), enabled: !!token });
+  const bookings = useQuery({ queryKey: ['support-bookings'], queryFn: () => http.get('/guestlist', { limit: 50 }), enabled: !!token });
+  const send = useMutation({ mutationFn: () => http.post('/support', { ...f, category, ...(guestRequestId && { guestRequestId }) }), onSuccess: (ticket) => { setMsg(`Ticket ${ticket.ticketCode || ticket.id} submitted. You can track replies below.`); setF({ subject: '', message: '' }); setGuestRequestId(''); qc.invalidateQueries({ queryKey: ['support-tickets'] }); }, onError: (e) => setMsg(errMsg(e)) });
   return (
     <div>
       <Header back title="Help & Support" />
@@ -145,9 +149,10 @@ export function Help() {
         <div key={q}><button className="flex w-full items-center justify-between px-4 py-4 text-sm" onClick={() => setOpen(open === i ? null : i)}>{q}<ChevronDown size={16} className={cx(open === i && 'rotate-180')} /></button>
           {open === i && <p className="px-4 pb-4 text-xs text-muted">{a}</p>}</div>))}</div>
       <div className="space-y-3 p-4"><h3 className="text-sm font-semibold">Report an issue</h3>
-        {token ? (<><Input label="Subject" value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /><Textarea label="Message" value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} />
-          {msg && <p className="text-xs text-muted">{msg}</p>}<Button loading={send.isPending} disabled={f.subject.length < 3 || f.message.length < 5} onClick={() => send.mutate()}>Submit</Button></>) : <p className="text-xs text-muted">Log in to contact support.</p>}
-        <a href="mailto:support@dusknyt.com" className="block text-center text-xs text-brand">Contact Support</a></div>
+        {token ? (<><Select label="What do you need help with?" value={category} onChange={(e) => setCategory(e.target.value)} options={[{ value: 'BOOKING', label: 'Booking or request' }, { value: 'GUESTLIST_ENTRY', label: 'Arrival or guestlist entry' }, { value: 'OFFER', label: 'Offer details' }, { value: 'ACCOUNT', label: 'Account or login' }, { value: 'OTHER', label: 'Something else' }]} /><Select label="Related booking (optional)" value={guestRequestId} onChange={(e) => setGuestRequestId(e.target.value)} options={[{ value: '', label: 'No booking selected' }, ...(bookings.data || []).map((r) => ({ value: r.id, label: `${r.code} · ${r.offer.club.name} · ${fmtDate(r.offer.date)}` }))]} /><Input label="Subject" maxLength={120} value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /><Textarea label="How can we help?" rows={5} maxLength={3000} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} /><p className="text-[11px] text-muted">Do not include passwords, payment details, or other sensitive information.</p>
+          {msg && <p className="text-xs text-muted">{msg}</p>}<Button loading={send.isPending} disabled={f.subject.trim().length < 3 || f.message.trim().length < 10} onClick={() => { setMsg(''); send.mutate(); }}>Submit support ticket</Button></>) : <p className="text-xs text-muted">Log in to submit and track a support ticket.</p>}
+        <a href="mailto:support@dusknyt.com" className="block text-center text-xs text-brand">Email support instead</a></div>
+      {token && <section className="space-y-3 px-4 pb-6"><div><h3 className="text-sm font-semibold">Your support tickets</h3><p className="text-xs text-muted">Track status and replies from the DUSKNYT team.</p></div><Async q={tickets} empty={<EmptyState title="No support tickets yet" text="Tickets you submit will appear here." />}>{(list) => list.map((ticket) => <Card key={ticket.id} className="space-y-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-brand">{ticket.ticketCode || `Legacy ticket ${ticket.id.slice(-6)}`}</p><p className="font-medium">{ticket.subject}</p></div><Badge s={ticket.status} /></div><p className="text-xs text-muted">{ticket.category.replaceAll('_', ' ')} · {timeAgo(ticket.updatedAt)}{ticket.guestRequest ? ` · Booking ${ticket.guestRequest.code}` : ''}</p><p className="whitespace-pre-wrap text-sm text-muted">{ticket.message}</p>{ticket.adminReply && <div className="rounded-xl bg-brand/10 p-3"><p className="mb-1 text-xs font-semibold">DUSKNYT support replied</p><p className="whitespace-pre-wrap text-sm">{ticket.adminReply}</p></div>}</Card>)}</Async></section>}
       <p className="pb-6 text-center text-xs text-muted">We're here to help!</p>
     </div>
   );

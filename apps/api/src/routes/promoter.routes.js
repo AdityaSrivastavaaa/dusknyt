@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '../lib/http.js';
 import { decide, analytics } from '../services/guestlist.js';
 import { offerEntryStartsAt } from '../lib/offer-time.js';
+import { createSupportTicket, supportTicketInclude } from '../lib/support.js';
+import { supportLimiter } from '../lib/rate-limit.js';
 
 // Mounted behind authenticate + authorize('PROMOTER') + loadPromoter.
 // EVERY query below is scoped to req.promoter.id — never trust ids from the client alone.
@@ -226,14 +228,30 @@ r.get('/analytics', wrap(async (req, res) => {
   res.json(await analytics(mine(req), req.query.range === 'month' ? 30 : 7));
 }));
 r.get('/profile', wrap(async (req, res) => {
-  const rows = await prisma.offer.findMany({ where: { promoterId: req.promoter.id }, select: { clubId: true, club: { select: { id: true, name: true } } }, distinct: ['clubId'] });
-  res.json({ ...publicUser(req.user), promoter: req.promoter, clubs: rows.map((x) => x.club) });
+  const [rows, rating] = await Promise.all([
+    prisma.offer.findMany({ where: { promoterId: req.promoter.id }, select: { clubId: true, club: { select: { id: true, name: true } } }, distinct: ['clubId'] }),
+    prisma.promoterRating.aggregate({ where: { promoterId: req.promoter.id }, _avg: { rating: true }, _count: { _all: true } }),
+  ]);
+  res.json({ ...publicUser(req.user), promoter: req.promoter, clubs: rows.map((x) => x.club), rating: { average: rating._avg.rating, count: rating._count._all } });
+}));
+r.get('/ratings', wrap(async (req, res) => {
+  res.json(await prisma.promoterRating.findMany({
+    where: { promoterId: req.promoter.id }, orderBy: { createdAt: 'desc' }, take: 50,
+    select: { id: true, rating: true, comment: true, createdAt: true, guestRequest: { select: { offer: { select: { date: true, club: { select: { name: true } }, event: { select: { title: true } } } } } } },
+  }));
 }));
 r.put('/profile', wrap(async (req, res) => {
   const d = parse(z.object({ name: z.string().min(2).optional(), email: z.string().email().optional(), avatar: z.string().url().optional().or(z.literal('')), brand: z.string().min(2).optional(), instagram: z.string().max(100).optional() }), req.body);
   const { brand, instagram, ...u } = d;
   if (brand || instagram !== undefined) await prisma.promoter.update({ where: { id: req.promoter.id }, data: { ...(brand && { brand }), ...(instagram !== undefined && { instagram }) } });
   res.json(publicUser(await prisma.user.update({ where: { id: req.user.id }, data: u })));
+}));
+r.get('/support', wrap(async (req, res) => {
+  res.json(await prisma.ticket.findMany({ where: { userId: req.user.id }, include: supportTicketInclude, orderBy: { updatedAt: 'desc' }, take: 50 }));
+}));
+r.post('/support', supportLimiter, wrap(async (req, res) => {
+  const d = parse(z.object({ category: z.enum(['BOOKING', 'GUESTLIST_ENTRY', 'OFFER', 'ACCOUNT', 'OTHER']), guestRequestId: z.string().optional(), subject: z.string().trim().min(3).max(120), message: z.string().trim().min(10).max(3000) }), req.body);
+  res.status(201).json(await createSupportTicket(req.user.id, d));
 }));
 r.post('/change-password', wrap(async (req, res) => {
   const d = parse(z.object({ current: z.string().optional(), next: z.string().min(8) }), req.body);

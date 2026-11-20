@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import { prisma } from '../lib/prisma.js';
 import { ApiError } from '../lib/http.js';
+import { ratingPromptDueAt } from '../lib/offer-time.js';
 import { notify, logActivity } from './notify.js';
 
 const nextCode = () => 'DN' + Math.floor(10000000 + Math.random() * 90000000);
@@ -27,6 +28,7 @@ export async function decide(id, action, { reason, note, actor, promoterId }) {
   if (!TRANSITIONS[r.status].includes(to)) throw new ApiError(400, `Cannot change a ${r.status.toLowerCase()} request`);
   const data = { status: to, promoterNote: note || null, reviewedById: actor.id };
   if (to === 'CONFIRMED') data.qrCode = await QRCode.toDataURL(JSON.stringify({ code: r.code, id: r.id }), { margin: 1, width: 280 });
+  if (to === 'CONFIRMED') data.ratingPromptAt = ratingPromptDueAt(r.offer);
   else data.rejectReason = reason || 'Capacity Full';
   const updated = await prisma.guestRequest.update({ where: { id }, data });
   await notify(

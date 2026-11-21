@@ -75,14 +75,18 @@ export function Explore() {
       <button onClick={() => nav('/search')} className="mx-4 mt-3 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-muted"><Search size={16} />Search clubs, events</button>
       <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4">{MUSIC.map((m) => <Chip key={m} onClick={() => nav('/search?music=' + m)}>{m}</Chip>)}</div>
       <Async q={q} empty={<EmptyState title="No clubs found" text="Try changing your filters." action={<Button onClick={() => useStore.getState().setFilters({})}>Clear filters</Button>} />}>{(list) => (
-        <div className="grid grid-cols-2 gap-3 p-4">{list.map((c) => <ClubCard key={c.id} club={c} />)}</div>
+        <div className="grid grid-cols-2 gap-3 p-4">{list.map((c) => {
+          const params = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
+          const query = params.toString();
+          return <ClubCard key={c.id} club={c} to={`/clubs/${c.id}${query ? `?${query}` : ''}`} />;
+        })}</div>
       )}</Async>
     </div>
   );
 }
 
 export function SearchResults() {
-  const city = useStore((s) => s.city); const [sp] = useSearchParams();
+  const city = useStore((s) => s.city); const [sp, setSp] = useSearchParams();
   const [text, setText] = useState(''); const [term, setTerm] = useState('');
   useEffect(() => { const t = setTimeout(() => setTerm(text.trim()), 300); return () => clearTimeout(t); }, [text]);
   const music = sp.get('music');
@@ -90,9 +94,9 @@ export function SearchResults() {
   return (
     <div>
       <Header back title="Search" />
-      <div className="p-4"><div className="flex items-center gap-2 rounded-xl border border-line bg-card px-3"><Search size={16} className="text-muted" /><input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Search clubs, areas…" className="w-full bg-transparent py-2.5 text-sm outline-none" /></div></div>
+      <div className="p-4 pb-2"><div className="flex items-center gap-2 rounded-xl border border-line bg-card px-3"><Search size={16} className="text-muted" /><input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Search clubs, areas…" className="w-full bg-transparent py-2.5 text-sm outline-none" /></div>{music && <div className="mt-3 flex items-center gap-2"><span className="text-xs text-muted">Music filter:</span><button type="button" onClick={() => { const next = new URLSearchParams(sp); next.delete('music'); setSp(next, { replace: true }); }} className="inline-flex items-center gap-2 rounded-full border border-brand/50 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand">{music}<span aria-hidden="true">×</span><span className="sr-only">Remove music filter</span></button></div>}</div>
       <Async q={q} empty={<EmptyState title="No results" text="Try a different club name or area." />}>{(list) => (
-        <div className="space-y-3 px-4">{list.map((c) => <ClubCard key={c.id} club={c} />)}</div>
+        <div className="space-y-3 px-4">{list.map((c) => <ClubCard key={c.id} club={c} to={`/clubs/${c.id}${music ? `?music=${encodeURIComponent(music)}` : ''}`} />)}</div>
       )}</Async>
     </div>
   );

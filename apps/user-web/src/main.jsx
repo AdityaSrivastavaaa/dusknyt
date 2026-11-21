@@ -7,7 +7,7 @@ import '@dusknyt/ui/styles.css';
 import App from './App.jsx';
 
 initTheme();
-const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } } });
+const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: 1, refetchOnWindowFocus: true, refetchOnReconnect: true, refetchOnMount: true, refetchInterval: 15_000, refetchIntervalInBackground: false } } });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={qc}>

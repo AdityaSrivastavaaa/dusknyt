@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import { prisma } from '../lib/prisma.js';
 import { ApiError } from '../lib/http.js';
-import { ratingPromptDueAt } from '../lib/offer-time.js';
+import { indiaStartOfDay, ratingPromptDueAt } from '../lib/offer-time.js';
 import { notify, logActivity } from './notify.js';
 
 const nextCode = () => 'DN' + Math.floor(10000000 + Math.random() * 90000000);
@@ -34,7 +34,7 @@ export async function decide(id, action, { reason, note, actor, promoterId }) {
   await notify(
     r.userId,
     to === 'CONFIRMED' ? "You're confirmed!" : 'Request not accepted',
-    to === 'CONFIRMED' ? `Your promoter guestlist booking for ${r.offer.club.name} is confirmed. Check your DUSKNYT booking for arrival instructions and promoter contact closer to entry.` : `Your request for ${r.offer.club.name} was not accepted: ${data.rejectReason}`,
+    to === 'CONFIRMED' ? `Your promoter guestlist booking for ${r.offer.club.name} is confirmed. One hour before the event, open your booking to chat or call the promoter in DUSKNYT.` : `Your request for ${r.offer.club.name} was not accepted: ${data.rejectReason}`,
     r.id,
   );
   await logActivity(actor, `Request ${r.code} ${to.toLowerCase()}`, 'request', r.id);
@@ -46,6 +46,14 @@ export const expireStale = () =>
     where: { status: 'PENDING', offer: { date: { lt: new Date(Date.now() - 24 * 3600 * 1000) } } },
     data: { status: 'EXPIRED' },
   }).catch((e) => console.error('expireStale', e.message));
+
+// Expire yesterday and older offers at India midnight while keeping their
+// records available for existing booking history and support cases.
+export const expirePastOffers = () =>
+  prisma.offer.updateMany({
+    where: { status: { in: ['ACTIVE', 'UPCOMING'] }, date: { lt: indiaStartOfDay() } },
+    data: { status: 'EXPIRED' },
+  }).catch((e) => console.error('expirePastOffers', e.message));
 
 /** Counts & earnings shared by promoter and admin analytics. */
 export async function analytics(where, days) {

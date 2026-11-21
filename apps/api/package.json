@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-"scripts": {
-  "dev": "nodemon src/server.js",
-  "start": "prisma db push && node src/server.js",
-  "postinstall": "prisma generate",
-  "db:push": "prisma db push",
-  "db:seed": "node prisma/seed.js"
-},
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "prisma db push && node src/server.js",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js"
+  },
   "dependencies": {
     "@dusknyt/shared": "*",
     "@prisma/client": "^5.22.0",
@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {

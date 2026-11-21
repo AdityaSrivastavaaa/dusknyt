@@ -4,14 +4,14 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '../lib/http.js';
 import { decide, analytics } from '../services/guestlist.js';
-import { offerEntryStartsAt } from '../lib/offer-time.js';
+import { eventStartsAt, indiaStartOfDay, offerEntryStartsAt } from '../lib/offer-time.js';
 import { createSupportTicket, supportTicketInclude } from '../lib/support.js';
 import { supportLimiter } from '../lib/rate-limit.js';
 
 // Mounted behind authenticate + authorize('PROMOTER') + loadPromoter.
 // EVERY query below is scoped to req.promoter.id — never trust ids from the client alone.
 const r = Router();
-const reqInclude = { user: { select: { id: true, name: true, phone: true, avatar: true } }, offer: { include: { club: { select: { id: true, name: true, area: true, address: true, images: true } }, event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } } } };
+const reqInclude = { user: { select: { id: true, name: true, phone: true } }, offer: { include: { club: { select: { id: true, name: true, area: true, address: true, images: true } }, event: { select: { id: true, title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } } } };
 const mine = (req) => ({ offer: { promoterId: req.promoter.id } });
 const normalizeContactPhone = (value) => {
   if (!value) return null;
@@ -20,7 +20,8 @@ const normalizeContactPhone = (value) => {
 };
 
 const checkInOpensAt = offerEntryStartsAt;
-const withCheckInTime = (request) => ({ ...request, checkInOpensAt: checkInOpensAt(request.offer)?.toISOString() || null });
+const arrivalWindow = (offer) => { const closesAt = eventStartsAt(offer); return closesAt ? { arrivalChatOpensAt: new Date(closesAt.getTime() - 60 * 60_000).toISOString(), arrivalChatClosesAt: closesAt.toISOString() } : { arrivalChatOpensAt: null, arrivalChatClosesAt: null }; };
+const withCheckInTime = (request) => ({ ...request, checkInOpensAt: checkInOpensAt(request.offer)?.toISOString() || null, ...arrivalWindow(request.offer) });
 
 r.get('/dashboard', wrap(async (req, res) => {
   const where = mine(req);
@@ -52,7 +53,7 @@ r.get('/dashboard', wrap(async (req, res) => {
 r.get('/clubs', wrap(async (req, res) => {
   res.json(await prisma.club.findMany({
     where: { status: 'ACTIVE' }, orderBy: { name: 'asc' },
-    select: { id: true, name: true, area: true, events: { where: { date: { gte: startOfDay() } }, orderBy: { date: 'asc' }, select: { id: true, title: true, djName: true, date: true, startTime: true, genre: true, poster: true } } },
+    select: { id: true, name: true, area: true, events: { where: { date: { gte: indiaStartOfDay() }, status: { in: ['ACTIVE', 'PENDING'] } }, orderBy: { date: 'asc' }, select: { id: true, title: true, djName: true, date: true, startTime: true, genre: true, poster: true, pendingPoster: true, status: true } } },
   }));
 }));
 // Matching event title and club/date reuse one shared event across promoters.
@@ -60,22 +61,24 @@ r.post('/events', wrap(async (req, res) => {
   const d = parse(z.object({ clubId: z.string(), title: z.string().min(2), djName: z.string().optional(), date: z.string(), startTime: z.string().default('9:00 PM'), genre: z.string().optional(), poster: z.string().url().optional().or(z.literal('')) }), req.body);
   const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
   if (!club) throw new ApiError(400, 'Select an active club');
-  const date = new Date(d.date), from = startOfDay(date), to = addDays(from, 1);
-  const existing = await prisma.event.findFirst({ where: { clubId: club.id, title: { equals: d.title, mode: 'insensitive' }, date: { gte: from, lt: to } } });
+  const date = new Date(`${d.date.slice(0, 10)}T00:00:00.000Z`);
+  if (date < indiaStartOfDay()) throw new ApiError(400, 'Past events cannot be created');
+  const existing = await prisma.event.findFirst({ where: { clubId: club.id, date } });
   if (existing) {
-    if (d.poster && !existing.poster) return res.json(await prisma.event.update({ where: { id: existing.id }, data: { poster: d.poster } }));
+    if (existing.status === 'INACTIVE') throw new ApiError(409, 'This club event is not available. Contact an admin before creating an offer for this date.');
     return res.json(existing);
   }
-  res.status(201).json(await prisma.event.create({ data: { ...d, date, clubId: club.id } }));
+  res.status(201).json(await prisma.event.create({ data: { ...d, date, poster: null, pendingPoster: d.poster || null, bannerChangePending: Boolean(d.poster), status: 'PENDING', clubId: club.id } }));
 }));
 r.patch('/events/:id/banner', wrap(async (req, res) => {
   const { poster } = parse(z.object({ poster: z.string().max(4_500_000).url().or(z.literal('')) }), req.body);
   const event = await prisma.event.findFirst({ where: { id: req.params.id, offers: { some: { promoterId: req.promoter.id } } } });
   if (!event) throw new ApiError(404, 'Event not found for this promoter');
-  res.json(await prisma.event.update({ where: { id: event.id }, data: { poster: poster || null } }));
+  if (event.date < indiaStartOfDay()) throw new ApiError(400, 'Past event banners cannot be changed');
+  res.json(await prisma.event.update({ where: { id: event.id }, data: { pendingPoster: poster || null, bannerChangePending: true } }));
 }));
 const offerBody = z.object({
-  clubId: z.string(), eventId: z.string().nullable().optional(), date: z.string(), entryType: z.string(), offerType: z.string(),
+  clubId: z.string(), eventId: z.string(), date: z.string(), entryType: z.string(), offerType: z.string(),
   entryTypes: z.array(z.string()).min(1).default([]),
   price: z.coerce.number().int().min(0).default(0), entryFrom: z.string().default('9:00 PM'), entryBefore: z.string().default('11:00 PM'), limitedSlots: z.boolean().default(false),
   contactPhone: z.string().trim().max(25).optional().or(z.literal('')).refine((phone) => !phone || (/^[+\d\s()-]+$/.test(phone) && phone.replace(/\D/g, '').length >= 10 && phone.replace(/\D/g, '').length <= 15), 'Enter a valid contact number'),
@@ -96,9 +99,11 @@ r.get('/offers', wrap(async (req, res) => {
 }));
 r.post('/offers', wrap(async (req, res) => {
   const d = parse(offerBody, req.body);
+  if (new Date(d.date) < indiaStartOfDay()) throw new ApiError(400, 'Past offers cannot be created');
   const club = await prisma.club.findFirst({ where: { id: d.clubId, status: 'ACTIVE' } });
   if (!club) throw new ApiError(400, 'Invalid club');
-  if (d.eventId && !await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id } })) throw new ApiError(400, 'Event does not belong to the selected club');
+  const event = await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id, date: new Date(`${d.date.slice(0, 10)}T00:00:00.000Z`) } });
+  if (!event) throw new ApiError(400, 'Select the event matching this club and date');
   const entryTypes = d.entryTypes.length ? d.entryTypes : [d.entryType];
   res.status(201).json(await prisma.offer.create({ data: { ...d, contactPhone: normalizeContactPhone(d.contactPhone), entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
 }));
@@ -111,13 +116,16 @@ r.put('/offers/:id', wrap(async (req, res) => {
   const d = parse(offerBody.partial(), req.body);
   const own = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id } });
   if (!own) throw new ApiError(404, 'Offer not found');
-  const { clubId, ...rest } = d; // club cannot be changed after creation
+  if (own.date < indiaStartOfDay()) throw new ApiError(400, 'Past offers cannot be edited');
+  if (d.date && new Date(d.date) < indiaStartOfDay()) throw new ApiError(400, 'Offers cannot be moved to a past date');
+  const { clubId, eventId, ...rest } = d; // Club and event association cannot be changed after creation.
   res.json(await prisma.offer.update({ where: { id: own.id }, data: { ...rest, ...(d.contactPhone !== undefined && { contactPhone: normalizeContactPhone(d.contactPhone) }), ...(d.entryTypes?.length && { entryType: d.entryTypes.join(', ') }), ...(d.date && { date: new Date(d.date) }) } }));
 }));
 r.patch('/offers/:id/status', wrap(async (req, res) => {
   const { status } = parse(z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'DRAFT']) }), req.body);
   const own = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id } });
   if (!own) throw new ApiError(404, 'Offer not found');
+  if (own.date < indiaStartOfDay() && status !== 'INACTIVE') throw new ApiError(400, 'Past offers cannot be reactivated');
   res.json(await prisma.offer.update({ where: { id: own.id }, data: { status } }));
 }));
 

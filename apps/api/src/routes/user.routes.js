@@ -4,13 +4,14 @@ import { prisma } from '../lib/prisma.js';
 import { ApiError, wrap, parse, paging, startOfDay, addDays, publicUser } from '../lib/http.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createRequest } from '../services/guestlist.js';
-import { promoterContactAvailableAt } from '../lib/offer-time.js';
+import { arrivalSessionWindow, indiaStartOfDay } from '../lib/offer-time.js';
 import { createSupportTicket, supportTicketInclude, supportTicketDetailInclude } from '../lib/support.js';
 import { supportLimiter } from '../lib/rate-limit.js';
 
 const r = Router();
 const auth = [authenticate, authorize('USER')];
-const offerInclude = { club: { select: { id: true, name: true, area: true, address: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true } } };
+const offerInclude = { club: { select: { id: true, name: true, area: true, address: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } };
+const withoutPromoterPhone = (offer) => { const { contactPhone: _contactPhone, shareContact: _shareContact, ...publicOffer } = offer; return publicOffer; };
 const withPrice = (c) => ({ ...c, startingPrice: c.offers?.length ? Math.min(...c.offers.map((o) => o.price)) : null, offerCount: c.offers?.length || 0, offers: undefined });
 const cityWhere = (city) => (city ? { city: { name: { equals: city, mode: 'insensitive' } } } : {});
 
@@ -41,10 +42,10 @@ r.get('/cities', wrap(async (req, res) => {
 
 r.get('/home', wrap(async (req, res) => {
   const base = { status: 'ACTIVE', ...cityWhere(req.query.city) };
-  const inc = { offers: { where: { status: 'ACTIVE' }, select: { price: true } } };
+  const inc = { offers: { where: { status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }] }, select: { price: true } } };
   const today = startOfDay();
   const [highlights, trending] = await Promise.all([
-    prisma.club.findMany({ where: { ...base, offers: { some: { status: 'ACTIVE', date: { gte: today, lt: addDays(today, 1) } } } }, include: inc, take: 8 }),
+    prisma.club.findMany({ where: { ...base, offers: { some: { status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }], date: { gte: today, lt: addDays(today, 1) } } } }, include: inc, take: 8 }),
     prisma.club.findMany({ where: base, include: inc, orderBy: { rating: 'desc' }, take: 8 }),
   ]);
   const fill = highlights.length ? highlights : trending.slice(0, 5);
@@ -53,49 +54,64 @@ r.get('/home', wrap(async (req, res) => {
 
 r.get('/clubs', wrap(async (req, res) => {
   const { city, q, music, maxPrice, entryType, date } = req.query;
+  const offerFilters = [{ OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }] }];
   const of = { status: 'ACTIVE' };
   if (maxPrice) of.price = { lte: +maxPrice };
-  if (entryType) of.OR = [{ entryTypes: { hasSome: String(entryType).split(',') } }, { entryType: { in: String(entryType).split(',') } }];
+  if (entryType) offerFilters.push({ OR: [{ entryTypes: { hasSome: String(entryType).split(',') } }, { entryType: { in: String(entryType).split(',') } }] });
   if (date) { const d = startOfDay(date); of.date = { gte: d, lt: addDays(d, 1) }; }
+  if (maxPrice || entryType || date) of.AND = offerFilters;
   const where = {
     status: 'ACTIVE', ...cityWhere(city),
     ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { area: { contains: q, mode: 'insensitive' } }] }),
     ...(music && { music: { hasSome: String(music).split(',') } }),
     ...((maxPrice || entryType || date) && { offers: { some: of } }),
   };
-  const clubs = await prisma.club.findMany({ where, ...paging(req.query), orderBy: { rating: 'desc' }, include: { offers: { where: { status: 'ACTIVE' }, select: { price: true } } } });
+  const clubs = await prisma.club.findMany({ where, ...paging(req.query), orderBy: { rating: 'desc' }, include: { offers: { where: { status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }] }, select: { price: true } } } });
   res.json(clubs.map(withPrice));
 }));
 
 r.get('/clubs/:id', wrap(async (req, res) => {
   const club = await prisma.club.findFirst({
     where: { id: req.params.id, status: 'ACTIVE' },
-    include: { city: true, events: { where: { date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, orderBy: { date: 'asc' }, take: 20 } },
+    include: { city: true, events: { where: { status: 'ACTIVE', date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, orderBy: { date: 'asc' }, take: 20 } },
   });
   if (!club) throw new ApiError(404, 'Club not found');
   res.json(club);
 }));
 r.get('/clubs/:id/events', wrap(async (req, res) => {
-  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, include: { club: { select: { name: true, address: true, area: true } } }, orderBy: { date: 'asc' } }));
+  res.json(await prisma.event.findMany({ where: { clubId: req.params.id, status: 'ACTIVE', date: { gte: startOfDay() }, offers: { some: { status: 'ACTIVE' } } }, include: { club: { select: { name: true, address: true, area: true } } }, orderBy: { date: 'asc' } }));
 }));
 r.get('/clubs/:id/offers', wrap(async (req, res) => {
-  const { eventId, date, sort } = req.query;
+  const { eventId, date, entryType, maxPrice, music, sort } = req.query;
   const eventDate = date ? startOfDay(date) : null;
-  res.json(await prisma.offer.findMany({
-    where: { clubId: req.params.id, status: 'ACTIVE', ...(eventId && { eventId }), ...(eventDate && { date: { gte: eventDate, lt: addDays(eventDate, 1) } }) },
+  const entryTypes = entryType ? String(entryType).split(',').filter(Boolean) : [];
+  const musicTypes = music ? String(music).split(',').filter(Boolean) : [];
+  const matchingFilters = [];
+  if (entryTypes.length) matchingFilters.push({ OR: [{ entryTypes: { hasSome: entryTypes } }, { entryType: { in: entryTypes } }] });
+  if (musicTypes.length) matchingFilters.push({ OR: [...musicTypes.map((genre) => ({ event: { is: { genre: { contains: genre, mode: 'insensitive' } } })), { eventId: null }] });
+  const where = {
+    clubId: req.params.id,
+    status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }],
+    ...(eventId && { eventId }),
+    ...(eventDate && { date: { gte: eventDate, lt: addDays(eventDate, 1) } }),
+    ...(matchingFilters.length && { AND: matchingFilters }),
+    ...(maxPrice !== undefined && maxPrice !== '' && Number.isFinite(Number(maxPrice)) && { price: { lte: Number(maxPrice) } }),
+  };
+  res.json((await prisma.offer.findMany({
+    where,
     include: offerInclude, orderBy: sort === 'price' ? { price: 'asc' } : { createdAt: 'desc' },
-  }));
+  })).map(withoutPromoterPhone));
 }));
 r.get('/offers', wrap(async (req, res) => {
-  res.json(await prisma.offer.findMany({
-    where: { status: 'ACTIVE', club: { status: 'ACTIVE', ...cityWhere(req.query.city) } },
+  res.json((await prisma.offer.findMany({
+    where: { status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }], club: { status: 'ACTIVE', ...cityWhere(req.query.city) } },
     include: offerInclude, orderBy: req.query.sort === 'price' ? { price: 'asc' } : { date: 'asc' }, ...paging(req.query),
-  }));
+  })).map(withoutPromoterPhone));
 }));
 r.get('/offers/:id', wrap(async (req, res) => {
-  const o = await prisma.offer.findUnique({ where: { id: req.params.id }, include: { ...offerInclude, event: true } });
+  const o = await prisma.offer.findFirst({ where: { id: req.params.id, status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }] }, include: { ...offerInclude, event: true } });
   if (!o) throw new ApiError(404, 'Offer not found');
-  res.json(o);
+  res.json(withoutPromoterPhone(o));
 }));
 
 /* ---------- profile ---------- */
@@ -113,20 +129,17 @@ r.put('/me', ...auth, wrap(async (req, res) => {
 }));
 
 /* ---------- guestlist requests ---------- */
-const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
-const requestDetailInclude = { rating: true, offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true, user: { select: { phone: true } } } }, event: { select: { title: true, startTime: true, djName: true, genre: true, poster: true } } } } };
-function withPromoterContact(request, now = Date.now()) {
+const reqInclude = { offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } } } };
+const requestDetailInclude = { rating: true, offer: { include: { club: { select: { id: true, name: true, area: true, images: true } }, promoter: { select: { brand: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } } } };
+function withArrivalSession(request, now = Date.now()) {
   const { offer, ...rest } = request;
-  const { contactPhone, shareContact, promoter, ...publicOffer } = offer;
-  const phone = contactPhone || promoter.user?.phone || null;
-  const availableAt = shareContact && phone ? promoterContactAvailableAt(offer) : null;
-  const released = request.status === 'CONFIRMED' && availableAt && now >= availableAt.getTime();
-  const { user: _promoterUser, ...publicPromoter } = promoter;
+  const { contactPhone: _contactPhone, shareContact: _shareContact, promoter, ...publicOffer } = offer;
+  const { opensAt, closesAt } = arrivalSessionWindow(offer);
+  const opened = request.status === 'CONFIRMED' && opensAt && now >= opensAt.getTime() && closesAt && now < closesAt.getTime();
   return {
     ...rest,
-    offer: { ...publicOffer, promoter: publicPromoter },
-    contactAvailableAt: availableAt?.toISOString() || null,
-    promoterContact: released ? { phone } : null,
+    offer: { ...publicOffer, promoter },
+    arrivalSession: { available: Boolean(opened), opensAt: opensAt?.toISOString() || null, closesAt: closesAt?.toISOString() || null },
   };
 }
 r.post('/guestlist', ...auth, wrap(async (req, res) => {
@@ -138,18 +151,20 @@ r.post('/guestlist', ...auth, wrap(async (req, res) => {
   res.status(201).json(await createRequest(req.user, d));
 }));
 r.get('/guestlist', ...auth, wrap(async (req, res) => {
-  const today = startOfDay();
+  // Offers store calendar dates as UTC-midnight timestamps. Compare them against
+  // India's calendar day, independent of the API server's timezone.
+  const today = indiaStartOfDay();
   const tab = req.query.status;
   const where = { userId: req.user.id };
   if (tab === 'upcoming') Object.assign(where, { status: 'CONFIRMED', offer: { date: { gte: today } } });
   else if (tab === 'pending') where.status = 'PENDING';
   else if (tab === 'past') where.OR = [{ status: { in: ['REJECTED', 'EXPIRED'] } }, { status: 'CONFIRMED', offer: { date: { lt: today } } }];
-  res.json(await prisma.guestRequest.findMany({ where, include: reqInclude, orderBy: { createdAt: 'desc' }, ...paging(req.query) }));
+  res.json((await prisma.guestRequest.findMany({ where, include: reqInclude, orderBy: { createdAt: 'desc' }, ...paging(req.query) })).map(withArrivalSession));
 }));
 r.get('/guestlist/:id', ...auth, wrap(async (req, res) => {
   const g = await prisma.guestRequest.findFirst({ where: { id: req.params.id, userId: req.user.id }, include: requestDetailInclude });
   if (!g) throw new ApiError(404, 'Request not found');
-  res.json(withPromoterContact(g));
+  res.json(withArrivalSession(g));
 }));
 r.post('/guestlist/:id/rating', ...auth, wrap(async (req, res) => {
   const d = parse(z.object({ rating: z.number().int().min(1).max(5), comment: z.string().trim().max(500).optional() }), req.body);
@@ -182,7 +197,7 @@ r.get('/saved', ...auth, wrap(async (req, res) => {
     return res.json(rows.map((s) => withPrice(s.club)));
   }
   const rows = await prisma.saved.findMany({ where: { userId: req.user.id, offerId: { not: null } }, include: { offer: { include: offerInclude } } });
-  res.json(rows.map((s) => s.offer));
+  res.json(rows.filter((s) => s.offer).map((s) => withoutPromoterPhone(s.offer)));
 }));
 r.post('/saved/toggle', ...auth, wrap(async (req, res) => {
   const { clubId, offerId } = parse(z.object({ clubId: z.string().optional(), offerId: z.string().optional() }), req.body);

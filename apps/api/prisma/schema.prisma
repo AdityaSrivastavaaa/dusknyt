@@ -78,6 +78,7 @@ model User {
   notifications      Notification[]
   tickets            Ticket[]
   promoterRatings    PromoterRating[]
+  arrivalMessages    ArrivalMessage[]
 }
 
 model Promoter {
@@ -136,8 +137,12 @@ model Event {
   startTime String   @default("9:00 PM")
   genre     String?
   poster    String?
+  pendingPoster String?
+  bannerChangePending Boolean @default(false)
+  status    EntityStatus @default(ACTIVE)
   club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
   offers    Offer[]
+
 }
 
 model Offer {
@@ -194,10 +199,24 @@ model GuestRequest {
   offer              Offer           @relation(fields: [offerId], references: [id])
   rating             PromoterRating?
   tickets            Ticket[]
+  arrivalMessages    ArrivalMessage[]
 
   @@index([offerId, status])
   @@index([userId, status])
   @@index([status, ratingPromptAt, ratingPromptSentAt])
+}
+
+model ArrivalMessage {
+  id             String   @id @default(cuid())
+  guestRequestId String
+  senderId       String
+  senderRole     Role
+  body           String
+  createdAt      DateTime @default(now())
+  guestRequest   GuestRequest @relation(fields: [guestRequestId], references: [id], onDelete: Cascade)
+  sender         User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([guestRequestId, createdAt])
 }
 
 model Saved {

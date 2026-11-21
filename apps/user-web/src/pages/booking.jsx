@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, X, Minus, Plus, Clock, Circle, Phone, MessageCircle, Star } from 'lucide-react';
-import { Async, Header, Button, Input, Textarea, Card, Badge, cx, useAuth } from '@dusknyt/ui';
+import { Check, X, Minus, Plus, Clock, Circle, MessageCircle, Star } from 'lucide-react';
+import { ArrivalRoom, Async, Header, Button, Input, Textarea, Card, Badge, cx, useAuth } from '@dusknyt/ui';
 import { formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
@@ -74,17 +74,10 @@ export function Submitted() {
 }
 
 export function RequestStatus() {
-  const { id } = useParams(); const nav = useNavigate(); const qc = useQueryClient(); const [ratingValue, setRatingValue] = useState(0); const [ratingComment, setRatingComment] = useState(''); const [ratingError, setRatingError] = useState('');
+  const { id } = useParams(); const nav = useNavigate(); const qc = useQueryClient(); const { token } = useAuth(); const [ratingValue, setRatingValue] = useState(0); const [ratingComment, setRatingComment] = useState(''); const [ratingError, setRatingError] = useState(''); const [arrivalOpen, setArrivalOpen] = useState(false); const [now, setNow] = useState(Date.now());
   const q = useQuery({ queryKey: ['gl', id], queryFn: () => http.get(`/guestlist/${id}`), refetchOnWindowFocus: true, refetchInterval: (c) => (c.state.data?.status === 'PENDING' ? 15000 : false) });
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(timer); }, []);
   const rate = useMutation({ mutationFn: () => http.post(`/guestlist/${id}/rating`, { rating: ratingValue, ...(ratingComment.trim() && { comment: ratingComment.trim() }) }), onSuccess: () => { setRatingError(''); qc.invalidateQueries({ queryKey: ['gl', id] }); }, onError: (e) => setRatingError(errMsg(e)) });
-  useEffect(() => {
-    const availableAt = q.data?.contactAvailableAt ? new Date(q.data.contactAvailableAt).getTime() : null;
-    if (q.data?.status !== 'CONFIRMED' || q.data?.promoterContact || !availableAt) return undefined;
-    const refresh = () => { if (Date.now() >= availableAt) qc.invalidateQueries({ queryKey: ['gl', id] }); };
-    const timer = setTimeout(refresh, Math.max(0, availableAt - Date.now()) + 250);
-    document.addEventListener('visibilitychange', refresh);
-    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, [id, q.data?.status, q.data?.contactAvailableAt, q.data?.promoterContact, qc]);
   return (
     <div>
       <Header back title="Request Status" sub={q.data?.code} />
@@ -100,7 +93,8 @@ export function RequestStatus() {
           {r.rejectReason && <Card className="mt-4 text-left"><p className="text-xs text-muted">Reason</p><p className="text-sm">{r.rejectReason}</p></Card>}
           <div className="mt-4"><Button onClick={() => nav(`/clubs/${r.offer.club.id}/offers`)}>View Other Offers</Button></div></div>)}
         <Card className="divide-y divide-line py-2"><Row k="Promoter" v={r.offer.promoter.brand} /><Row k="Club" v={r.offer.club.name} /><Row k="Date" v={fmtDate(r.offer.date)} /><Row k="Entry" v={`${r.offer.entryType} · ${r.guestCount} guest(s)`} /><Row k="Guestlist entry" v={`${r.offer.entryFrom || '9:00 PM'}–${r.offer.entryBefore}`} /></Card>
-        {r.status === 'CONFIRMED' && <Card className="space-y-3"><div><h2 className="font-semibold">Arrival contact</h2><p className="mt-1 text-xs text-muted">This booking is with the promoter, not a club-issued ticket. Contact the promoter to confirm where and how to join their guestlist.</p></div>{r.promoterContact?.phone ? <div className="grid grid-cols-2 gap-2"><a href={`tel:${r.promoterContact.phone}`} className="flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-3 text-sm font-semibold text-white"><Phone size={16} />Call promoter</a><a href={`https://wa.me/${r.promoterContact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi, I have DUSKNYT guestlist booking ${r.code} for ${r.offer.club.name} on ${fmtDate(r.offer.date)}. Could you share the agreed guestlist meeting point?`)}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-line px-3 py-3 text-sm font-semibold"><MessageCircle size={16} />WhatsApp</a></div> : r.contactAvailableAt ? <p className="rounded-xl bg-brand/10 p-3 text-sm text-muted">The promoter’s number will appear here from {new Date(r.contactAvailableAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} India time, one hour before the entry window.</p> : <p className="rounded-xl bg-card p-3 text-sm text-muted">The promoter has not shared a contact number for this offer. Check the offer details for the arrival instructions.</p>}</Card>}
+        {r.status === 'CONFIRMED' && <Card className="space-y-3"><div><h2 className="font-semibold">Meet your promoter</h2><p className="mt-1 text-xs text-muted">Your phone number stays private. Use DUSKNYT chat or an in-app internet call to agree on the guestlist meeting point. These open one hour before the event.</p></div>{(() => { const opensAt = r.arrivalSession?.opensAt ? new Date(r.arrivalSession.opensAt).getTime() : null; const closesAt = r.arrivalSession?.closesAt ? new Date(r.arrivalSession.closesAt).getTime() : null; const available = Boolean(opensAt && closesAt && now >= opensAt && now < closesAt); return available ? <Button className="gap-2" onClick={() => setArrivalOpen(true)}><MessageCircle size={16} />Chat or call promoter</Button> : opensAt && now < opensAt ? <p className="rounded-xl bg-brand/10 p-3 text-sm text-muted">Chat and internet calls open at {new Date(opensAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' })} India time.</p> : <p className="rounded-xl bg-card p-3 text-sm text-muted">The arrival contact window is closed. Check your booking details for the event.</p>; })()}</Card>}
+        {arrivalOpen && <ArrivalRoom token={token} requestId={r.id} title={`${r.offer.promoter.brand} · ${r.offer.club.name}`} onClose={() => setArrivalOpen(false)} />}
         {r.status === 'CONFIRMED' && r.ratingPromptSentAt && <Card className="space-y-3"><div><h2 className="font-semibold">Rate your promoter</h2><p className="text-xs text-muted">How was {r.offer.promoter.brand} and the guestlist coordination for {r.offer.club.name}?</p></div>{r.rating ? <><div className="flex items-center gap-1 text-brand">{Array.from({ length: 5 }, (_, i) => <Star key={i} size={18} className={i < r.rating.rating ? 'fill-brand' : ''} />)}<span className="ml-2 text-xs text-muted">Your rating</span></div>{r.rating.comment && <p className="text-sm text-muted">{r.rating.comment}</p>}<p className="text-xs text-ok">Thanks for sharing your feedback.</p></> : <><div className="flex gap-2" role="radiogroup" aria-label="Rate this promoter">{Array.from({ length: 5 }, (_, i) => <button key={i} type="button" role="radio" aria-checked={ratingValue === i + 1} aria-label={`${i + 1} star${i ? 's' : ''}`} onClick={() => setRatingValue(i + 1)} className={i < ratingValue ? 'text-brand' : 'text-muted'}><Star size={28} className={i < ratingValue ? 'fill-brand' : ''} /></button>)}</div><Textarea label="Comment (optional)" rows={3} maxLength={500} value={ratingComment} onChange={(e) => setRatingComment(e.target.value)} />{ratingError && <p className="text-xs text-bad">{ratingError}</p>}<Button disabled={!ratingValue} loading={rate.isPending} onClick={() => { setRatingError(''); rate.mutate(); }}>Submit rating</Button></>}</Card>}
       </div>)}</Async>
     </div>

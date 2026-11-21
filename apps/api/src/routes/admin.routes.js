@@ -67,7 +67,33 @@ r.delete('/clubs/:id', wrap(async (req, res) => { // soft delete keeps history i
 }));
 r.post('/clubs/:id/events', wrap(async (req, res) => {
   const d = parse(z.object({ title: z.string().min(2), djName: z.string().optional(), date: z.string(), startTime: z.string().default('9:00 PM'), genre: z.string().optional(), poster: z.string().url().optional().or(z.literal('')) }), req.body);
-  res.status(201).json(await prisma.event.create({ data: { ...d, date: new Date(d.date), clubId: req.params.id } }));
+  const date = new Date(`${d.date.slice(0, 10)}T00:00:00.000Z`);
+  const existing = await prisma.event.findFirst({ where: { clubId: req.params.id, date } });
+  if (existing) throw new ApiError(409, 'An event already exists for this club and date');
+  res.status(201).json(await prisma.event.create({ data: { ...d, date, poster: d.poster || null, status: 'ACTIVE', clubId: req.params.id } }));
+}));
+r.get('/events', wrap(async (req, res) => {
+  const where = req.query.status ? { status: String(req.query.status) } : { OR: [{ status: 'PENDING' }, { bannerChangePending: true }] };
+  res.json(await prisma.event.findMany({ where, include: { club: { select: { id: true, name: true, address: true, city: { select: { name: true } } } }, _count: { select: { offers: true } } }, orderBy: { date: 'asc' }, ...paging(req.query) }));
+}));
+r.post('/events/:id/review', wrap(async (req, res) => {
+  const d = parse(z.object({ action: z.enum(['APPROVE_EVENT', 'REJECT_EVENT', 'APPROVE_BANNER', 'REJECT_BANNER']) }), req.body);
+  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+  if (!event) throw new ApiError(404, 'Event not found');
+  let data;
+  if (d.action === 'APPROVE_EVENT') {
+    if (event.status !== 'PENDING') throw new ApiError(409, 'This event is no longer awaiting approval');
+    data = { status: 'ACTIVE', ...(event.pendingPoster && { poster: event.pendingPoster }), pendingPoster: null, bannerChangePending: false };
+  } else if (d.action === 'REJECT_EVENT') {
+    if (event.status !== 'PENDING') throw new ApiError(409, 'Only a pending event can be rejected');
+    data = { status: 'INACTIVE', pendingPoster: null, bannerChangePending: false };
+  } else {
+    if (!event.bannerChangePending) throw new ApiError(409, 'There is no event banner awaiting review');
+    data = d.action === 'APPROVE_BANNER' ? { poster: event.pendingPoster, pendingPoster: null, bannerChangePending: false } : { pendingPoster: null, bannerChangePending: false };
+  }
+  const updated = await prisma.event.update({ where: { id: event.id }, data });
+  await logActivity(req.user, `Event '${event.title}' ${d.action.toLowerCase().replaceAll('_', ' ')}`, 'event', event.id);
+  res.json(updated);
 }));
 r.delete('/events/:id', wrap(async (req, res) => { await prisma.event.delete({ where: { id: req.params.id } }); res.json({ ok: true }); }));
 

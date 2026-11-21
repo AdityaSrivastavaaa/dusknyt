@@ -1,5 +1,5 @@
 import { Routes, Route, Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, Megaphone, Ticket, Inbox, Users, BarChart3, Wallet, Settings as Cog, ShieldCheck, ScrollText, LifeBuoy, Bell, LogOut } from 'lucide-react';
+import { LayoutDashboard, Building2, Megaphone, Ticket, Inbox, Users, BarChart3, Wallet, Settings as Cog, ShieldCheck, ScrollText, LifeBuoy, Bell, LogOut, CalendarCheck } from 'lucide-react';
 import { RequireAuth, Logo, ThemeToggle, useAuth, cx } from '@dusknyt/ui';
 import { Login } from './pages/Login';
 import { Dashboard, Analytics } from './pages/Dashboard';
@@ -7,11 +7,12 @@ import { Clubs, ClubDetails, ClubForm } from './pages/Clubs';
 import { Promoters, PromoterDetails, PromoterForm } from './pages/Promoters';
 import { Offers, OfferDetails, OfferForm } from './pages/Offers';
 import { Requests, RequestDetails } from './pages/Requests';
+import { EventApprovals } from './pages/Events';
 import { UsersList, Payouts, Settings, Roles, ActivityLogs, Support, Notifications } from './pages/Misc';
 
 const NAV = [
   ['/', 'Dashboard', LayoutDashboard], ['/clubs', 'Clubs', Building2], ['/promoters', 'Promoters', Megaphone], ['/offers', 'Offers', Ticket],
-  ['/requests', 'Guestlist Requests', Inbox], ['/users', 'Users', Users], ['/analytics', 'Reports & Analytics', BarChart3], ['/payouts', 'Payouts', Wallet],
+  ['/requests', 'Guestlist Requests', Inbox], ['/events', 'Event Approvals', CalendarCheck], ['/users', 'Users', Users], ['/analytics', 'Reports & Analytics', BarChart3], ['/payouts', 'Payouts', Wallet],
   ['/notifications', 'Notifications', Bell], ['/support', 'Support', LifeBuoy], ['/roles', 'Roles & Permissions', ShieldCheck], ['/logs', 'Activity Logs', ScrollText], ['/settings', 'Settings', Cog],
 ];
 
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="promoters" element={<Promoters />} /><Route path="promoters/new" element={<PromoterForm />} /><Route path="promoters/:id" element={<PromoterDetails />} />
           <Route path="offers" element={<Offers />} /><Route path="offers/new" element={<OfferForm />} /><Route path="offers/:id" element={<OfferDetails />} /><Route path="offers/:id/edit" element={<OfferForm />} />
           <Route path="requests" element={<Requests />} /><Route path="requests/:id" element={<RequestDetails />} />
+          <Route path="events" element={<EventApprovals />} />
           <Route path="users" element={<UsersList />} /><Route path="analytics" element={<Analytics />} /><Route path="payouts" element={<Payouts />} />
           <Route path="notifications" element={<Notifications />} /><Route path="support" element={<Support />} />
           <Route path="roles" element={<Roles />} /><Route path="logs" element={<ActivityLogs />} /><Route path="settings" element={<Settings />} />

@@ -51,8 +51,8 @@ async function main() {
   }
   const events = [];
   for (const [i, c] of clubs.entries()) {
-    events.push(await prisma.event.create({ data: { clubId: c.id, title: 'Bollywood Night', djName: 'DJ Chetas', date: day(i % 2), startTime: '9:00 PM', genre: 'Bollywood' } }));
-    events.push(await prisma.event.create({ data: { clubId: c.id, title: 'EDM Night', djName: 'DJ Nucleya', date: day(2 + (i % 3)), startTime: '10:00 PM', genre: 'EDM' } }));
+    events.push(await prisma.event.create({ data: { clubId: c.id, title: 'Bollywood Night', djName: 'DJ Chetas', date: day(i % 2), startTime: '9:00 PM', genre: 'Bollywood', status: 'ACTIVE' } }));
+    events.push(await prisma.event.create({ data: { clubId: c.id, title: 'EDM Night', djName: 'DJ Nucleya', date: day(2 + (i % 3)), startTime: '10:00 PM', genre: 'EDM', status: 'ACTIVE' } }));
   }
   const mkOffer = (ci, ei, promoter, offerType, entryType, price, before, d, extra = {}) => prisma.offer.create({
     data: {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState, useAuth } from '@dusknyt/ui';
+import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState } from '@dusknyt/ui';
 import { ENTRY_TYPES, OFFER_TYPES, OFFER_PERK_GROUPS, formatINR, fmtDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
@@ -24,11 +24,12 @@ export function MyOffers() {
 }
 
 export function CreateOffer() {
-  const nav = useNavigate(); const qc = useQueryClient(); const { user } = useAuth(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
+  const nav = useNavigate(); const qc = useQueryClient(); const [step, setStep] = useState(1); const [err, setErr] = useState('');
   const [customPerk, setCustomPerk] = useState('');
   const clubs = useQuery({ queryKey: ['p-clubs'], queryFn: () => http.get('/promoter/clubs') });
-  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', eventBannerExisting: false, entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', contactPhone: '', shareContact: false, limitedSlots: false, date: '', inclusions: [], terms: '' });
+  const [f, setF] = useState({ clubId: '', eventId: '', eventTitle: '', djName: '', startTime: '9:00 PM', genre: '', eventBanner: '', entryTypes: ['Couple'], offerType: 'Free Entry', price: 0, entryFrom: '9:00 PM', entryBefore: '11:00 PM', limitedSlots: false, date: '', inclusions: [], terms: '' });
   const club = clubs.data?.find((c) => c.id === f.clubId);
+  const existingEvent = club?.events.find((event) => event.date.slice(0, 10) === f.date.slice(0, 10));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const create = useMutation({
     mutationFn: async (status) => {
@@ -40,8 +41,11 @@ export function CreateOffer() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['offers'] }); nav('/offers', { replace: true }); },
     onError: (e) => setErr(errMsg(e)),
   });
-  const onClub = (e) => { setF({ ...f, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', genre: '', eventBanner: '', eventBannerExisting: false, date: '' }); };
-  const onEvent = (e) => { const ev = club?.events.find((x) => x.id === e.target.value); setF({ ...f, eventId: e.target.value, eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', genre: ev?.genre || '', eventBanner: ev?.poster || '', eventBannerExisting: Boolean(ev?.poster), date: ev?.date?.slice(0, 10) || f.date }); };
+  const onClub = (e) => { setF((old) => ({ ...old, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', genre: '', eventBanner: '', date: '' })); };
+  const onDate = (e) => {
+    const date = e.target.value; const ev = club?.events.find((event) => event.date.slice(0, 10) === date);
+    setF((old) => ({ ...old, date, eventId: ev?.id || '', eventTitle: ev?.title || '', djName: ev?.djName || '', startTime: ev?.startTime || '9:00 PM', genre: ev?.genre || '', eventBanner: ev?.pendingPoster || ev?.poster || '' }));
+  };
   const toggleInclusion = (value) => setF((old) => ({ ...old, inclusions: old.inclusions.includes(value) ? old.inclusions.filter((x) => x !== value) : [...old.inclusions, value] }));
   const toggleEntryType = (value) => setF((old) => ({ ...old, entryTypes: old.entryTypes.includes(value) ? old.entryTypes.filter((x) => x !== value) : [...old.entryTypes, value] }));
   const addCustomPerk = () => {
@@ -66,19 +70,19 @@ export function CreateOffer() {
       <Header back title="Create New Offer" sub={`Step ${step} of 2`} />
       <Async q={clubs}>{() => (<div className="space-y-4 p-4">
         {step === 1 ? (<>
-          <Select label="Club" value={f.clubId} onChange={onClub} options={[{ value: '', label: 'Select club' }, ...clubs.data.map((c) => ({ value: c.id, label: c.name }))]} />
-          <Select label="Use an existing event (optional)" value={f.eventId} onChange={onEvent} options={[{ value: '', label: 'Create event details below' }, ...(club?.events || []).map((e) => ({ value: e.id, label: `${e.title} · ${fmtDate(e.date)}` }))]} />
-          <Input label="Event name" value={f.eventTitle} onChange={set('eventTitle')} placeholder="e.g. Bollywood Night" />
-          <Input label="DJ / performer (optional)" value={f.djName} onChange={set('djName')} />
-          <Input label="Event date" type="date" value={f.date.slice(0, 10)} onChange={set('date')} />
-          <Input label="Event start time" value={f.startTime} onChange={set('startTime')} />
-          <Input label="Music / theme (optional)" value={f.genre} onChange={set('genre')} placeholder="e.g. Bollywood" />
-          <div className="space-y-2"><label className="block text-xs text-muted">Event banner (optional){f.eventBannerExisting ? <span className="mt-1 block text-[11px] text-muted">This shared event already has a banner, visible on all promoter offers.</span> : <input type="file" accept="image/*" onChange={(e) => uploadEventBanner(e.target.files?.[0])} className="mt-1 block w-full text-sm" />}</label>{f.eventBanner && <><img src={f.eventBanner} alt="Event banner preview" className="h-40 w-full rounded-xl object-cover" />{!f.eventBannerExisting && <button type="button" onClick={() => setF((old) => ({ ...old, eventBanner: '' }))} className="text-xs text-bad">Remove banner</button>}</>}</div>
+          <Select label="Club" value={f.clubId} onChange={onClub} options={[{ value: '', label: 'Select club first' }, ...clubs.data.map((c) => ({ value: c.id, label: c.name }))]} />
+          <Input label="Event date" type="date" min={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())} value={f.date.slice(0, 10)} disabled={!f.clubId} onChange={onDate} />
+          {existingEvent ? <Card className="space-y-1 border-brand/40"><p className="font-semibold">Using this club’s existing event</p><p className="text-sm">{f.eventTitle}</p><p className="text-xs text-muted">{f.djName || 'Performer TBA'} · {f.genre || 'Music theme TBA'} · Starts {f.startTime}</p><p className="text-xs text-muted">{existingEvent.status === 'PENDING' ? 'Awaiting admin approval. Your offer will appear to users after approval.' : 'Approved and shared by this club’s promoters.'}</p></Card> : <>
+            <Input label="Event name" value={f.eventTitle} onChange={set('eventTitle')} placeholder="e.g. Bollywood Night" disabled={!f.date} />
+            <Input label="DJ / performer (optional)" value={f.djName} onChange={set('djName')} disabled={!f.date} />
+            <Input label="Event start time" value={f.startTime} onChange={set('startTime')} disabled={!f.date} />
+            <Input label="Music / theme (optional)" value={f.genre} onChange={set('genre')} placeholder="e.g. Bollywood" disabled={!f.date} />
+            <div className="space-y-2"><label className="block text-xs text-muted">Event banner (optional; admin approval required before users see it)<input type="file" accept="image/*" onChange={(e) => uploadEventBanner(e.target.files?.[0])} disabled={!f.date} className="mt-1 block w-full text-sm" /></label>{f.eventBanner && <><img src={f.eventBanner} alt="Event banner preview" className="h-40 w-full rounded-xl object-cover" /><button type="button" onClick={() => setF((old) => ({ ...old, eventBanner: '' }))} className="text-xs text-bad">Remove banner</button></>}</div>
+          </>}
           <fieldset><legend className="mb-2 text-xs text-muted">Who is this offer for? Select all that apply</legend><div className="flex flex-wrap gap-2">{ENTRY_TYPES.map((t) => <label key={t} className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-xs"><input type="checkbox" checked={f.entryTypes.includes(t)} onChange={() => toggleEntryType(t)} className="accent-brand" />{t}</label>)}</div></fieldset>
           <Select label="Offer type" value={f.offerType} onChange={set('offerType')} options={OFFER_TYPES} />
           {['Cover Charge', 'Stag Entry'].includes(f.offerType) && <Input label="Price (₹)" type="number" min="0" value={f.price} onChange={set('price')} />}
           <div className="grid grid-cols-2 gap-3"><Input label="Guestlist entry starts" value={f.entryFrom} onChange={set('entryFrom')} placeholder="10:00 PM" /><Input label="Guestlist entry ends" value={f.entryBefore} onChange={set('entryBefore')} placeholder="11:45 PM" /></div>
-          <Card className="space-y-3"><div><p className="text-sm font-semibold">Arrival contact</p><p className="text-xs text-muted">Guests with confirmed bookings can see this number one hour before this offer’s entry window.</p></div><Input label="Contact phone (optional)" type="tel" inputMode="tel" value={f.contactPhone} onChange={set('contactPhone')} placeholder={`Use account number ${user?.phone || ''}`} /><label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={f.shareContact} onChange={(e) => setF((old) => ({ ...old, shareContact: e.target.checked }))} className="mt-0.5 accent-brand" /><span>Share this number with confirmed guests so they can coordinate arrival. Leave phone blank to use my promoter login number. My guestlist booking is not a club-issued ticket.</span></label></Card>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.limitedSlots} onChange={(e) => setF({ ...f, limitedSlots: e.target.checked })} className="accent-brand" />Limited slots</label>
           <Button disabled={!f.clubId || !f.date || !f.entryTypes.length || f.eventTitle.trim().length < 2} onClick={() => setStep(2)}>Next</Button>
         </>) : (<>
@@ -98,21 +102,19 @@ export function CreateOffer() {
 }
 
 export function OfferDetail() {
-  const { id } = useParams(); const qc = useQueryClient(); const { user } = useAuth();
-  const [contactPhone, setContactPhone] = useState(''); const [shareContact, setShareContact] = useState(false); const [contactMessage, setContactMessage] = useState('');
+  const { id } = useParams(); const qc = useQueryClient();
   const q = useQuery({ queryKey: ['offer', id], queryFn: () => http.get(`/promoter/offers/${id}`) });
-  useEffect(() => { if (q.data) { setContactPhone(q.data.contactPhone || ''); setShareContact(Boolean(q.data.shareContact)); } }, [q.data?.id, q.data?.contactPhone, q.data?.shareContact]);
   const set = useMutation({ mutationFn: (status) => http.patch(`/promoter/offers/${id}/status`, { status }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['offer', id] }); qc.invalidateQueries({ queryKey: ['offers'] }); } });
-  const saveContact = useMutation({ mutationFn: () => http.put(`/promoter/offers/${id}`, { contactPhone, shareContact }), onSuccess: () => { setContactMessage('Arrival contact saved.'); qc.invalidateQueries({ queryKey: ['offer', id] }); qc.invalidateQueries({ queryKey: ['offers'] }); }, onError: (e) => setContactMessage(errMsg(e)) });
   return (
     <div>
       <Header back title="Offer Details" />
       <Async q={q}>{(o) => (<div className="space-y-4 p-4">
+        {o.date.slice(0, 10) < new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()) && <p className="rounded-xl border border-line bg-card p-3 text-xs text-muted">This is a past offer. Its details are read-only.</p>}
         <Card><div className="flex justify-between"><p className="text-lg font-bold">{o.club.name}</p><Badge s={o.status} /></div><p className="text-sm text-muted">{fmtDate(o.date)} · {o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="mt-2 text-3xl font-black">{formatINR(o.price)}</p><p className="text-xs text-muted">Entry {o.entryFrom}–{o.entryBefore} · {o._count.requests} requests {o.limitedSlots ? '· Limited slots' : ''}</p></Card>
         {o.inclusions.length > 0 && <Card><p className="mb-1 text-xs text-muted">Included</p>{o.inclusions.map((x) => <p key={x} className="text-sm">• {x}</p>)}</Card>}
-        <Card className="space-y-3"><div><p className="font-semibold">Arrival contact</p><p className="text-xs text-muted">The number is shared only with confirmed guests, one hour before entry starts. Blank uses your promoter login number ({user?.phone || 'not available'}).</p></div><Input label="Contact phone (optional)" type="tel" inputMode="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="Use promoter login number" /><label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={shareContact} onChange={(e) => setShareContact(e.target.checked)} className="mt-0.5 accent-brand" /><span>Share this number with confirmed guests for arrival coordination. The booking is not a club-issued ticket.</span></label>{contactMessage && <p className={`text-xs ${contactMessage.includes('saved') ? 'text-ok' : 'text-bad'}`}>{contactMessage}</p>}<Button variant="outline" loading={saveContact.isPending} onClick={() => { setContactMessage(''); saveContact.mutate(); }}>Save Arrival Contact</Button></Card>
+        {o.date.slice(0, 10) >= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()) && <Card className="space-y-2"><p className="font-semibold">Guest arrival coordination</p><p className="text-xs text-muted">Guests can use private DUSKNYT chat and an internet call during the hour before the event starts. Your phone number is not shown.</p></Card>}
         {o.status === 'INACTIVE' && <p className="text-center text-sm text-muted">Offer expired or inactive.</p>}
-        {['INACTIVE', 'DRAFT'].includes(o.status) ? <Button loading={set.isPending} onClick={() => set.mutate('ACTIVE')}>Activate Offer</Button> : <Button variant="danger" loading={set.isPending} onClick={() => set.mutate('INACTIVE')}>Deactivate Offer</Button>}
+        {o.date.slice(0, 10) >= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()) && (['INACTIVE', 'DRAFT'].includes(o.status) ? <Button loading={set.isPending} onClick={() => set.mutate('ACTIVE')}>Activate Offer</Button> : <Button variant="danger" loading={set.isPending} onClick={() => set.mutate('INACTIVE')}>Deactivate Offer</Button>)}
       </div>)}</Async>
     </div>
   );

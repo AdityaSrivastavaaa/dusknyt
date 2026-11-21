@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LifeBuoy, LogOut, ChevronDown, Star } from 'lucide-react';
 import { Async, Header, Button, Input, Textarea, Select, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
@@ -36,13 +36,15 @@ export function Saved() {
 }
 
 export function MyGuestlists() {
-  const { token } = useAuth(); const nav = useNavigate(); const [tab, setTab] = useState('upcoming');
+  const { token } = useAuth(); const nav = useNavigate(); const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('status'); const tab = ['upcoming', 'pending', 'past'].includes(requestedTab) ? requestedTab : 'upcoming';
   const q = useQuery({ queryKey: ['guestlists', tab], queryFn: () => http.get('/guestlist', { status: tab }), enabled: !!token });
+  const selectTab = (value) => setSearchParams(value === 'upcoming' ? {} : { status: value }, { replace: true });
   if (!token) return <><Header title="My Bookings" /><LoginPrompt message="Log in to see your current guestlist requests and entry passes." onLogin={() => nav('/login', { state: { from: '/guestlists' } })} /></>;
   return (
     <div>
       <Header title="My Bookings" sub="Requests, confirmations and entry passes" />
-      <div className="p-4"><Tabs tabs={[{ value: 'upcoming', label: 'Current' }, { value: 'pending', label: 'Pending' }, { value: 'past', label: 'Past' }]} value={tab} onChange={setTab} /></div>
+      <div className="p-4"><Tabs tabs={[{ value: 'upcoming', label: 'Current' }, { value: 'pending', label: 'Pending' }, { value: 'past', label: 'Past' }]} value={tab} onChange={selectTab} /></div>
       <Async q={q} empty={<EmptyState title="Nothing here" text="Your guestlist requests will show up here." />}>{(list) => (
         <div className="space-y-3 px-4">{list.map((r) => (
           <Link key={r.id} to={`/requests/${r.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-card p-4">
@@ -139,7 +141,7 @@ export function Settings() {
 
 const FAQ = [
   ['How does a guestlist booking work?', 'Choose a promoter offer and send a request. Your booking is confirmed only after the promoter accepts it. A DUSKNYT confirmation is not a club-issued ticket or a guarantee of admission.'],
-  ['How do I find the promoter at the venue?', 'For offers where the promoter shares a contact number, Call and WhatsApp options appear on your confirmed booking one hour before the entry window. Contact them for the agreed guestlist meeting point and arrival instructions.'],
+  ['How do I find the promoter at the venue?', 'One hour before the event starts, open your confirmed booking to use private DUSKNYT chat or an internet call with the promoter and agree on a meeting point. Your phone number is not shared.'],
   ['Where can I see my booking status?', 'Open My Bookings to see pending requests, confirmed bookings, guest names, event details, and any promoter arrival contact.'],
   ['I need to change or cancel my request', 'Guestlist requests cannot currently be edited in DUSKNYT. Submit a support ticket with your booking code and tell us what needs to change.'],
   ['When can I rate a promoter?', 'The morning after your confirmed event, DUSKNYT sends an in-app prompt. You can rate the promoter from the booking details page.'],

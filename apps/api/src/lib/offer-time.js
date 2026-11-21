@@ -30,6 +30,15 @@ export function offerEntryStartsAt(offer) {
   return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), hour, minute) - INDIA_OFFSET_MINUTES * 60_000);
 }
 
+export function eventStartsAt(offer) {
+  return offerEntryStartsAt({ ...offer, entryFrom: offer.event?.startTime || offer.entryFrom });
+}
+
+export function arrivalSessionWindow(offer) {
+  const closesAt = eventStartsAt(offer);
+  return closesAt ? { opensAt: new Date(closesAt.getTime() - 60 * 60_000), closesAt } : { opensAt: null, closesAt: null };
+}
+
 export function promoterContactAvailableAt(offer) {
   const startsAt = offerEntryStartsAt(offer);
   return startsAt ? new Date(startsAt.getTime() - 60 * 60_000) : null;

@@ -88,7 +88,10 @@ r.get('/clubs/:id/offers', wrap(async (req, res) => {
   const musicTypes = music ? String(music).split(',').filter(Boolean) : [];
   const matchingFilters = [];
   if (entryTypes.length) matchingFilters.push({ OR: [{ entryTypes: { hasSome: entryTypes } }, { entryType: { in: entryTypes } }] });
-  if (musicTypes.length) matchingFilters.push({ OR: [...musicTypes.map((genre) => ({ event: { is: { genre: { contains: genre, mode: 'insensitive' } } })), { eventId: null }] });
+  if (musicTypes.length) {
+    const genreFilters = musicTypes.map((genre) => ({ event: { is: { genre: { contains: genre, mode: 'insensitive' } } } }));
+    matchingFilters.push({ OR: [...genreFilters, { eventId: null }] });
+  }
   const where = {
     clubId: req.params.id,
     status: 'ACTIVE', OR: [{ eventId: null }, { event: { is: { status: 'ACTIVE' } } }],

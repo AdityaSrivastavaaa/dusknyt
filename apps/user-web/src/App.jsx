@@ -1,6 +1,7 @@
-import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Home as HomeIcon, Search, Ticket, ClipboardList, User } from 'lucide-react';
-import { Page, BottomNav, RequireAuth } from '@dusknyt/ui';
+import { Page, BottomNav, RequireAuth, useAuth } from '@dusknyt/ui';
+import { isAtLeast21 } from '@dusknyt/shared';
 import { Splash, CitySelect } from './pages/onboarding';
 import { Home, Explore, SearchResults, Filters } from './pages/discovery';
 import { ClubDetails, EventSelect, ClubOffers, OfferDetails, AllOffers } from './pages/clubs';
@@ -14,10 +15,19 @@ const nav = [
 ];
 const Main = () => <Page nav><Outlet /><BottomNav items={nav} /></Page>;
 const Plain = () => <Page><Outlet /></Page>;
+const AgeGate = () => {
+  const { user } = useAuth(); const location = useLocation();
+  const allowedIncompleteRoutes = ['/login', '/verify', '/setup'];
+  if (user && !isAtLeast21(user.dob) && !allowedIncompleteRoutes.includes(location.pathname)) {
+    return <Navigate to="/setup" replace state={{ from: `${location.pathname}${location.search}` }} />;
+  }
+  return <Outlet />;
+};
 
 export default function App() {
   return (
     <Routes>
+      <Route element={<AgeGate />}>
       <Route element={<Main />}>
         <Route index element={<Home />} />
         <Route path="explore" element={<Explore />} />
@@ -52,6 +62,7 @@ export default function App() {
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }

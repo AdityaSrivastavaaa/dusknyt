@@ -4,6 +4,24 @@ export const OFFER_STATUS = ['ACTIVE', 'UPCOMING', 'EXPIRED', 'DRAFT', 'INACTIVE
 export const ENTRY_TYPES = ['Couple', 'Girls', 'Ladies', 'Stag', 'Group'];
 export const OFFER_TYPES = ['Free Entry', 'Cover Charge', 'Stag Entry', 'Ladies Night'];
 export const MUSIC = ['EDM', 'Bollywood', 'Hip Hop', 'Commercial'];
+export const minimumAdultDate = () => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(({ type, value }) => [type, value]));
+  return `${Number(parts.year) - 21}-${parts.month}-${parts.day}`;
+};
+export const isAtLeast21 = (value) => {
+  if (!value) return false;
+  const valueDate = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valueDate)) return false;
+  const date = new Date(`${valueDate}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const dob = date.toISOString().slice(0, 10);
+  if (dob !== valueDate) return false;
+  const today = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(({ type, value: part }) => [type, part]));
+  const birth = dob.split('-').map(Number); const current = [Number(today.year), Number(today.month), Number(today.day)];
+  let age = current[0] - birth[0];
+  if (current[1] < birth[1] || (current[1] === birth[1] && current[2] < birth[2])) age -= 1;
+  return age >= 21;
+};
 export const REJECT_REASONS = ['Capacity Full', 'Guest criteria not met', 'Offer unavailable', 'Other'];
 export const OFFER_PERK_GROUPS = [
   { label: 'Entry & access', options: ['Complimentary Entry', 'Guestlist Entry', 'No Cover Charge', 'Skip the Line', 'Priority Entry', 'Dedicated Guestlist Counter', 'VIP Entry'] },

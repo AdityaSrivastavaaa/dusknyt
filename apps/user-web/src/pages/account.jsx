@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Heart, Bookmark, Bell, UserCog, Settings as Cog, HelpCircle, LifeBuoy, LogOut, ChevronDown, Star } from 'lucide-react';
 import { Async, Header, Button, Input, Textarea, Select, Tabs, Card, Badge, Avatar, EmptyState, ThemeToggle, Toggle, useAuth, cx } from '@dusknyt/ui';
-import { fmtDate, timeAgo } from '@dusknyt/shared';
+import { fmtDate, timeAgo, isAtLeast21, minimumAdultDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 import { ClubCard, OfferCard } from '../components';
@@ -100,7 +100,7 @@ export function Profile() {
         </Card>
         <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Your activity</h2><Card className="overflow-hidden p-0"><MenuItem to="/guestlists" icon={Heart} label="My Bookings" /><MenuItem to="/saved" icon={Bookmark} label="Saved Clubs & Offers" /><MenuItem to="/notifications" icon={Bell} label="Notifications" /></Card></section>
         <section><h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Account & support</h2><Card className="overflow-hidden p-0"><MenuItem to="/settings" icon={Cog} label="Settings" /><MenuItem to="/help" icon={HelpCircle} label="Help & Support" /><MenuItem to="/support-tickets" icon={LifeBuoy} label="My Support Tickets" /></Card></section>
-        <Card className="overflow-hidden p-0"><MenuItem icon={LogOut} label="Log out" onClick={() => { logout(); nav('/login'); }} /></Card>
+        <Card className="overflow-hidden p-0"><MenuItem icon={LogOut} label="Log out" onClick={() => { if (window.confirm('Are you sure you want to log out?')) { logout(); nav('/login'); } }} /></Card>
       </div>
     </div>
   );
@@ -116,14 +116,14 @@ export function EditProfile() {
       <div className="space-y-4 p-4"><div className="flex flex-col items-center gap-3"><Avatar src={f.avatar} name={f.name} size={88} /><label className="w-full rounded-xl border border-line bg-card p-3 text-xs text-muted">Upload profile photo from your phone<input type="file" accept="image/*" onChange={async (e) => { try { setErr(''); const avatar = await profilePhotoDataUrl(e.target.files?.[0]); setF((old) => ({ ...old, avatar })); } catch (error) { setErr(error.message || 'Could not read this image.'); } }} className="mt-2 block w-full text-sm text-fg" /></label>{f.avatar && <button type="button" onClick={() => setF((old) => ({ ...old, avatar: '' }))} className="text-xs text-bad">Remove photo</button>}</div>
         <Input label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
-        <Input label="Date of birth" type="date" value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
-        {err && <p className="text-xs text-bad">{err}</p>}<Button loading={save.isPending} onClick={() => save.mutate()}>Save Changes</Button></div>
+        <Input label="Date of birth (21+ only)" type="date" max={minimumAdultDate()} value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
+        {!isAtLeast21(f.dob) && <p className="text-xs text-bad">You must be at least 21 years old to use DUSKNYT.</p>}
+        {err && <p className="text-xs text-bad">{err}</p>}<Button loading={save.isPending} disabled={!isAtLeast21(f.dob)} onClick={() => save.mutate()}>Save Changes</Button></div>
     </div>
   );
 }
 
 export function Settings() {
-  const nav = useNavigate(); const { logout } = useAuth();
   const [push, setPush] = useState(() => localStorage.getItem('dn_push') !== '0');
   return (
     <div>
@@ -133,7 +133,6 @@ export function Settings() {
         <div className="flex items-center justify-between px-4 py-4 text-sm"><span>Theme</span><ThemeToggle /></div>
         <a className="block px-4 py-4 text-sm" href="https://dusknyt.com/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>
         <a className="block px-4 py-4 text-sm" href="https://dusknyt.com/terms" target="_blank" rel="noreferrer">Terms & Conditions</a>
-        <button className="block w-full px-4 py-4 text-left text-sm text-bad" onClick={() => { logout(); nav('/login'); }}>Logout</button>
       </div>
     </div>
   );

@@ -7,10 +7,12 @@ import { createRequest } from '../services/guestlist.js';
 import { arrivalSessionWindow, indiaStartOfDay } from '../lib/offer-time.js';
 import { createSupportTicket, supportTicketInclude, supportTicketDetailInclude } from '../lib/support.js';
 import { supportLimiter } from '../lib/rate-limit.js';
+import { isAtLeast21 } from '@dusknyt/shared';
 
 const r = Router();
-const auth = [authenticate, authorize('USER')];
-const offerInclude = { club: { select: { id: true, name: true, area: true, address: true, images: true } }, promoter: { select: { brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } };
+const adultOnly = (req, res, next) => isAtLeast21(req.user.dob) ? next() : next(new ApiError(403, 'DUSKNYT is available only to users aged 21 or older. Add your date of birth to continue.'));
+const auth = [authenticate, authorize('USER'), adultOnly];
+const offerInclude = { club: { select: { id: true, name: true, area: true, address: true, images: true } }, promoter: { select: { id: true, brand: true, logo: true } }, event: { select: { title: true, date: true, startTime: true, djName: true, genre: true, poster: true, status: true } } };
 const withoutPromoterPhone = (offer) => { const { contactPhone: _contactPhone, shareContact: _shareContact, ...publicOffer } = offer; return publicOffer; };
 const withPrice = (c) => ({ ...c, startingPrice: c.offers?.length ? Math.min(...c.offers.map((o) => o.price)) : null, offerCount: c.offers?.length || 0, offers: undefined });
 const cityWhere = (city) => (city ? { city: { name: { equals: city, mode: 'insensitive' } } } : {});
@@ -118,11 +120,11 @@ r.get('/offers/:id', wrap(async (req, res) => {
 }));
 
 /* ---------- profile ---------- */
-r.get('/me', ...auth, (req, res) => res.json(publicUser(req.user)));
-r.put('/me', ...auth, wrap(async (req, res) => {
+r.get('/me', authenticate, authorize('USER'), (req, res) => res.json(publicUser(req.user)));
+r.put('/me', authenticate, authorize('USER'), wrap(async (req, res) => {
   const d = parse(z.object({
     name: z.string().min(2).optional(), email: z.string().email().optional().or(z.literal('')),
-    dob: z.string().optional().or(z.literal('')), avatar: z.string().url().optional().or(z.literal('')),
+    dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isAtLeast21, 'DUSKNYT is available only to users aged 21 or older.'), avatar: z.string().url().optional().or(z.literal('')),
   }), req.body);
   const u = await prisma.user.update({
     where: { id: req.user.id },

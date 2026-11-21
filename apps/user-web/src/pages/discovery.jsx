@@ -66,14 +66,22 @@ export function Home() {
 }
 
 export function Explore() {
-  const city = useStore((s) => s.city); const filters = useStore((s) => s.filters); const nav = useNavigate();
+  const city = useStore((s) => s.city); const filters = useStore((s) => s.filters); const setFilters = useStore((s) => s.setFilters); const nav = useNavigate();
   const q = useQuery({ queryKey: ['clubs', city, filters], queryFn: () => http.get('/clubs', { city, ...filters }), enabled: !!city });
   const active = Object.keys(filters).length;
+  const selectedMusic = filters.music ? filters.music.split(',').filter(Boolean) : [];
+  const toggleMusic = (genre) => {
+    const nextMusic = selectedMusic.includes(genre) ? selectedMusic.filter((item) => item !== genre) : [...selectedMusic, genre];
+    const nextFilters = { ...filters };
+    if (nextMusic.length) nextFilters.music = nextMusic.join(','); else delete nextFilters.music;
+    setFilters(nextFilters);
+  };
   return (
     <div>
       <Header title="Explore" sub="Find the perfect night" right={<button onClick={() => nav('/filters')} className="relative" aria-label="Filters"><SlidersHorizontal size={20} />{active > 0 && <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-brand" />}</button>} />
       <button onClick={() => nav('/search')} className="mx-4 mt-3 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-muted"><Search size={16} />Search clubs, events</button>
-      <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4">{MUSIC.map((m) => <Chip key={m} onClick={() => nav('/search?music=' + m)}>{m}</Chip>)}</div>
+      <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-4">{MUSIC.map((m) => <Chip key={m} active={selectedMusic.includes(m)} onClick={() => toggleMusic(m)}>{m}</Chip>)}</div>
+      {selectedMusic.length > 0 && <div className="mt-2 flex flex-wrap gap-2 px-4">{selectedMusic.map((genre) => <Chip key={genre} active onClick={() => toggleMusic(genre)}>{genre} ×</Chip>)}</div>}
       <Async q={q} empty={<EmptyState title="No clubs found" text="Try changing your filters." action={<Button onClick={() => useStore.getState().setFilters({})}>Clear filters</Button>} />}>{(list) => (
         <div className="grid grid-cols-2 gap-3 p-4">{list.map((c) => {
           const params = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));

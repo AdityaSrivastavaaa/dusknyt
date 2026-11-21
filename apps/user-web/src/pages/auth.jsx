@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { Button, Input, Logo, useAuth, Header } from '@dusknyt/ui';
+import { isAtLeast21, minimumAdultDate } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 
@@ -75,8 +76,9 @@ export function Verify() {
 }
 
 export function ProfileSetup() {
-  const nav = useNavigate(); const { state } = useLocation(); const { user, update } = useAuth();
-  const [f, setF] = useState({ name: user?.name || '', email: user?.email || '', dob: '' }); const [err, setErr] = useState('');
+  const nav = useNavigate(); const { state } = useLocation(); const { user, update, logout } = useAuth();
+  const [f, setF] = useState({ name: user?.name || '', email: user?.email || '', dob: user?.dob?.slice(0, 10) || '' }); const [err, setErr] = useState('');
+  const oldEnough = isAtLeast21(f.dob);
   const save = useMutation({
     mutationFn: () => http.put('/me', f),
     onSuccess: (u) => { update(u); nav(state?.from || '/', { replace: true }); },
@@ -88,9 +90,11 @@ export function ProfileSetup() {
       <div className="space-y-4">
         <Input label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <Input label="Email (optional)" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
-        <Input label="Date of birth" type="date" value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
+        <Input label="Date of birth (21+ only)" type="date" max={minimumAdultDate()} value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
+        {f.dob && !oldEnough && <p className="text-xs text-bad">You must be at least 21 years old to use DUSKNYT.</p>}
         {err && <p className="text-xs text-bad">{err}</p>}
-        <Button loading={save.isPending} disabled={f.name.trim().length < 2} onClick={() => save.mutate()}>Continue</Button>
+        <Button loading={save.isPending} disabled={f.name.trim().length < 2 || !oldEnough} onClick={() => save.mutate()}>Continue</Button>
+        {!oldEnough && <button type="button" onClick={() => { logout(); nav('/login', { replace: true }); }} className="w-full py-2 text-sm text-muted">Log out</button>}
       </div>
     </div>
   );

@@ -110,7 +110,7 @@ export function ClubOffers() {
 
 export function AllOffers() {
   const city = useStore((s) => s.city); const [sort, setSort] = useState('date');
-  const q = useQuery({ queryKey: ['all-offers', city, sort], queryFn: () => http.get('/offers', { city, sort }) });
+  const q = useQuery({ queryKey: ['all-offers', city, sort], queryFn: () => http.get('/offers', { city, sort, limit: 100 }) });
   return (
     <div>
       <Header title="Offers" sub="Best guestlist deals tonight" />
@@ -120,6 +120,14 @@ export function AllOffers() {
           const date = o.date.slice(0, 10), key = `${o.club.id}:${date}`;
           const g = m.get(key) || { club: o.club, date, offers: [] }; g.offers.push(o); m.set(key, g); return m;
         }, new Map()).values()];
+        groups.sort((a, b) => {
+          const byDate = a.date.localeCompare(b.date);
+          if (byDate || sort !== 'price') return byDate || a.club.name.localeCompare(b.club.name);
+          const promoterCount = (group) => new Set(group.offers.map((offer) => offer.promoter.id || offer.promoter.brand)).size;
+          const byOfferCount = promoterCount(b) - promoterCount(a);
+          const byLowestPrice = Math.min(...a.offers.map((o) => o.price)) - Math.min(...b.offers.map((o) => o.price));
+          return byOfferCount || byLowestPrice || a.club.name.localeCompare(b.club.name);
+        });
         return <div className="flex flex-col gap-3 px-4">{groups.map((g) => <Link className="block" key={`${g.club.id}:${g.date}`} to={`/clubs/${g.club.id}/offers?date=${g.date}`}><Card className="flex items-center gap-3 p-3"><Img src={g.club.images?.[0]} name={g.club.name} className="h-16 w-16 rounded-xl" /><div className="min-w-0 flex-1"><p className="font-semibold">{g.club.name}</p><p className="text-xs text-muted">{fmtDate(g.date)} · {g.offers.length} promoter offer{g.offers.length === 1 ? '' : 's'}</p><p className="truncate text-xs text-muted">{[...new Set(g.offers.map((o) => o.promoter.brand))].join(' · ')}</p></div><span className="text-xs font-semibold text-brand">{formatINR(Math.min(...g.offers.map((o) => o.price)))}</span></Card></Link>)}</div>;
       }}</Async>
     </div>

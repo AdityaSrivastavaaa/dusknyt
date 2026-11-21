@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { arrivalSessionWindow } from '../lib/offer-time.js';
+import { isAtLeast21 } from '@dusknyt/shared';
 
 const roomFor = (requestId) => `arrival:${requestId}`;
 const sessionFor = (request) => arrivalSessionWindow(request.offer);
@@ -17,6 +18,7 @@ export function attachArrivalSockets(server) {
       const claims = jwt.verify(token, env.jwtSecret);
       const user = await prisma.user.findUnique({ where: { id: claims.sub }, include: { promoter: { select: { id: true, brand: true, status: true } } } });
       if (!user || user.status !== 'ACTIVE') throw new Error('Account unavailable.');
+      if (user.role === 'USER' && !isAtLeast21(user.dob)) throw new Error('DUSKNYT is available only to users aged 21 or older.');
       socket.data.user = { id: user.id, role: user.role, name: user.name, promoterId: user.promoter?.id, promoterBrand: user.promoter?.brand, promoterStatus: user.promoter?.status };
       next();
     } catch (error) { next(new Error(error.message || 'Not authorized.')); }

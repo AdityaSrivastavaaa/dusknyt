@@ -73,7 +73,8 @@ export function ClubOffers() {
   };
   return (
     <div>
-      <Header back title="Offers at this club" sub={sp.get('date') ? `${fmtDate(sp.get('date'))} · Compare promoter offers` : 'Compare promoter offers by date'} />
+      <Header back title="Compare Guestlist Offers" sub={`${q.data?.[0]?.club?.name || 'Club'}${sp.get('date') ? ` · ${fmtDate(sp.get('date'))}` : ''}`} />
+      <Card className="mx-4 mt-4 space-y-2 !p-3"><p className="text-sm font-semibold">Choose a promoter’s guestlist offer for {q.data?.[0]?.club?.name || 'this club'}</p><p className="text-xs text-muted">The name on each offer is its promoter or guestlist host (a person, team, or brand), not the club. Compare the entry type, arrival time, price, and perks.</p><p className="text-xs text-brand">Tap an offer to see its perks and terms, then select “Request this guestlist”.</p></Card>
       <div className="p-4"><Select label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} options={[{ value: 'recommended', label: 'Recommended' }, { value: 'price', label: 'Price: low to high' }]} /></div>
       <Async q={q} empty={<EmptyState title="No offers available" text="Promoters haven't listed offers for this event yet." />}>{(list) => {
         const groups = [...list.reduce((map, offer) => { const date = offer.date.slice(0, 10); const group = map.get(date) || []; group.push(offer); map.set(date, group); return map; }, new Map()).entries()];
@@ -81,12 +82,12 @@ export function ClubOffers() {
           const open = expanded.includes(o.id);
           return <Card key={o.id} className="overflow-hidden p-0"><button type="button" aria-expanded={open} onClick={() => setExpanded((old) => open ? old.filter((x) => x !== o.id) : [...old, o.id])} className="flex min-h-[104px] w-full items-stretch text-left">
             <div className="w-1/4 min-w-[76px] shrink-0"><Img src={o.club.images?.[0]} name={o.club.name} className="h-full min-h-[104px] w-full rounded-none object-cover" /></div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 p-2.5"><div className="min-w-0 flex-1"><p className="text-xs text-muted">{o.promoter.brand}</p><p className="font-semibold leading-tight">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p>{o.event?.title && <p className="truncate text-xs text-muted">{o.event.title}{o.event.startTime ? ` · ${o.event.startTime}` : ''}</p>}<p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></div>
-            <div className="shrink-0 text-right"><p className="font-bold">{formatINR(o.price)}</p><p className="text-xs text-brand">{open ? 'Hide' : 'Details'}</p></div></div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 p-2.5"><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Promoter / guestlist host</p><p className="truncate text-xs text-fg">{o.promoter.brand}</p><p className="font-semibold leading-tight">{o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p>{o.event?.title && <p className="truncate text-xs text-muted">{o.event.title}{o.event.startTime ? ` · ${o.event.startTime}` : ''}</p>}<p className="text-xs text-muted">Entry {o.entryFrom || '9:00 PM'}–{o.entryBefore}{o.limitedSlots ? ' · Limited slots' : ''}</p></div>
+            <div className="shrink-0 text-right"><p className="font-bold">{o.price === 0 ? 'Free Entry' : formatINR(o.price)}</p><p className="text-xs text-brand">{open ? 'Hide details' : 'View details'}</p></div></div>
           </button>{open && <div className="space-y-3 border-t border-line p-4">
             {o.inclusions?.length > 0 && <div><p className="mb-1 text-xs font-semibold text-muted">Included perks</p><ul className="space-y-1 text-sm">{o.inclusions.map((perk) => <li key={perk} className="flex gap-2"><Check size={14} className="mt-0.5 shrink-0 text-ok" />{perk}</li>)}</ul></div>}
             {o.terms && <div><p className="mb-1 text-xs font-semibold text-muted">Terms</p><p className="text-sm text-muted">{o.terms}</p></div>}
-            <Button onClick={() => book(o)}>Get Guestlist Entry</Button>
+            <Button onClick={() => book(o)}>Request this guestlist</Button>
           </div>}</Card>;
         })}</section>)}</div>;
       }}</Async>

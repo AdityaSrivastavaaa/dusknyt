@@ -10,6 +10,7 @@ import { Requests, RequestDetails, ReviewRequest, Guestlist, GuestlistEvent } fr
 import { More, EditProfile, ChangePassword, Notifications, Help, About } from './pages/profile';
 import { useAuth } from '@dusknyt/ui';
 import { ArrivalCallListener } from './components/ArrivalCallListener';
+import { ArrivalConversation } from './pages/arrival';
 
 function PromoterGuard() {
   const { token, user } = useAuth(); const location = useLocation();
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="requests" element={<Requests />} />
           <Route path="guestlist" element={<Guestlist />} />
           <Route path="guestlist/event" element={<GuestlistEvent />} />
+          <Route path="arrival/:requestId" element={<ArrivalConversation />} />
           <Route path="more" element={<More />} />
           <Route path="analytics" element={<Analytics />} />
         </Route>

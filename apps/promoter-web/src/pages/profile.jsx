@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, UserCog, KeyRound, Bell, HelpCircle, Info, LogOut, BarChart3, Star } from 'lucide-react';
-import { Async, Header, Button, Input, Textarea, Select, Card, Badge, Avatar, ThemeToggle, Toggle, EmptyState, useAuth } from '@dusknyt/ui';
+import { ChevronRight, UserCog, KeyRound, Bell, HelpCircle, Info, LogOut, BarChart3, Star, Phone, MessageCircle } from 'lucide-react';
+import { Async, Header, Button, Input, Textarea, Select, Card, Badge, Avatar, ThemeToggle, EmptyState, useAuth } from '@dusknyt/ui';
 import { timeAgo } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
@@ -52,10 +52,12 @@ export function ChangePassword() {
 }
 
 export function Notifications() {
-  const [on, setOn] = useState(() => localStorage.getItem('dn_p_push') !== '0');
-  return (<div><Header back title="Notification Settings" />
-    <div className="flex items-center justify-between px-4 py-4 text-sm"><span>New request alerts</span><Toggle on={on} onChange={(v) => { setOn(v); localStorage.setItem('dn_p_push', v ? '1' : '0'); }} /></div>
-    <p className="px-4 text-xs text-muted">New requests also show as a badge on the Requests tab.</p></div>);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['p-notifications'], queryFn: () => http.get('/promoter/notifications'), refetchInterval: 15000 });
+  const markRead = useMutation({ mutationFn: () => http.post('/promoter/notifications/read-all'), onSuccess: () => qc.invalidateQueries({ queryKey: ['p-notifications'] }) });
+  const unread = q.data?.filter((item) => !item.isRead).length || 0;
+  return (<div><Header back title="Notifications" sub={unread ? `${unread} unread` : 'Your promoter updates'} right={unread > 0 && <button type="button" onClick={() => markRead.mutate()} disabled={markRead.isPending} className="text-xs font-semibold text-brand">Mark all read</button>} />
+    <div className="space-y-3 p-4"><Async q={q} empty={<EmptyState title="No notifications" text="Event approvals, guest updates, and account alerts will appear here." />}>{(items) => items.map((item) => <Card key={item.id} className={`space-y-2 ${!item.isRead ? 'border-brand/40' : ''}`}><div className="flex items-start gap-3"><span className="rounded-xl bg-brand/15 p-2 text-brand">{/approved|live|event/i.test(item.title) ? <Bell size={17} /> : /call/i.test(item.title) ? <Phone size={17} /> : <MessageCircle size={17} />}</span><div className="min-w-0 flex-1"><p className="font-semibold">{item.title}</p><p className="whitespace-pre-wrap break-words text-sm text-muted">{item.body}</p><p className="text-[11px] text-muted">{timeAgo(item.createdAt)}</p></div>{!item.isRead && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand" />}</div></Card>)}</Async></div></div>);
 }
 export function Help() {
   const qc = useQueryClient(); const [category, setCategory] = useState('OFFER'); const [guestRequestId, setGuestRequestId] = useState(''); const [form, setForm] = useState({ subject: '', message: '' }); const [message, setMessage] = useState('');

@@ -95,7 +95,7 @@ r.get('/offers', wrap(async (req, res) => {
   else if (t === 'upcoming') where.status = 'UPCOMING';
   else if (t === 'drafts') where.status = 'DRAFT';
   else if (t === 'past') where.OR = [{ status: { in: ['EXPIRED', 'INACTIVE'] } }, { date: { lt: today } }];
-  res.json(await prisma.offer.findMany({ where, include: { club: { select: { name: true, images: true } }, _count: { select: { requests: true } } }, orderBy: { date: 'desc' } }));
+  res.json(await prisma.offer.findMany({ where, include: { club: { select: { name: true, images: true } }, event: { select: { status: true } }, _count: { select: { requests: true } } }, orderBy: { date: 'desc' } }));
 }));
 r.post('/offers', wrap(async (req, res) => {
   const d = parse(offerBody, req.body);
@@ -105,7 +105,8 @@ r.post('/offers', wrap(async (req, res) => {
   const event = await prisma.event.findFirst({ where: { id: d.eventId, clubId: club.id, date: new Date(`${d.date.slice(0, 10)}T00:00:00.000Z`) } });
   if (!event) throw new ApiError(400, 'Select the event matching this club and date');
   const entryTypes = d.entryTypes.length ? d.entryTypes : [d.entryType];
-  res.status(201).json(await prisma.offer.create({ data: { ...d, contactPhone: normalizeContactPhone(d.contactPhone), entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } }));
+  const offer = await prisma.offer.create({ data: { ...d, status: event.status === 'PENDING' && d.status !== 'DRAFT' ? 'UPCOMING' : d.status, contactPhone: normalizeContactPhone(d.contactPhone), entryTypes, entryType: entryTypes.join(', '), date: new Date(d.date), title: titleOf(d, club.name), promoterId: req.promoter.id } });
+  res.status(201).json({ ...offer, eventStatus: event.status });
 }));
 r.get('/offers/:id', wrap(async (req, res) => {
   const o = await prisma.offer.findFirst({ where: { id: req.params.id, promoterId: req.promoter.id }, include: { club: true, event: true, _count: { select: { requests: true } } } });
@@ -247,6 +248,13 @@ r.get('/ratings', wrap(async (req, res) => {
     where: { promoterId: req.promoter.id }, orderBy: { createdAt: 'desc' }, take: 50,
     select: { id: true, rating: true, comment: true, createdAt: true, guestRequest: { select: { offer: { select: { date: true, club: { select: { name: true } }, event: { select: { title: true } } } } } } },
   }));
+}));
+r.get('/notifications', wrap(async (req, res) => {
+  res.json(await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 }));
+}));
+r.post('/notifications/read-all', wrap(async (req, res) => {
+  await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });
+  res.json({ ok: true });
 }));
 r.put('/profile', wrap(async (req, res) => {
   const d = parse(z.object({ name: z.string().min(2).optional(), email: z.string().email().optional(), avatar: z.string().url().optional().or(z.literal('')), brand: z.string().min(2).optional(), instagram: z.string().max(100).optional() }), req.body);

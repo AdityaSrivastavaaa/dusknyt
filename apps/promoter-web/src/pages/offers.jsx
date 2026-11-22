@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Async, Header, Button, Input, Select, Textarea, Chip, Tabs, Badge, Img, Card, EmptyState, ErrorState } from '@dusknyt/ui';
@@ -8,16 +8,18 @@ import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 
 export function MyOffers() {
-  const [tab, setTab] = useState('active');
+  const location = useLocation();
+  const [tab, setTab] = useState(() => location.state?.pendingReview ? 'upcoming' : 'active');
   const q = useQuery({ queryKey: ['offers', tab], queryFn: () => http.get('/promoter/offers', { tab }) });
   return (
     <div>
       <Header title="My Offers" />
+      {location.state?.pendingReview && <div className="px-4 pt-4"><Card className="space-y-1 border-warn/40"><p className="font-semibold text-warn">Submitted for admin review</p><p className="text-xs text-muted">Your event and offer are saved. Guests will see the offer only after the DUSKNYT admin approves the event. We’ll notify you when it’s live.</p></Card></div>}
       <div className="p-4"><Tabs tabs={[{ value: 'active', label: 'Active' }, { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'drafts', label: 'Drafts' }]} value={tab} onChange={setTab} /></div>
       <Async q={q} empty={<EmptyState title="No active offers" text="Create your first offer and start getting guests." action={<Link to="/offers/new"><Button>Create Offer</Button></Link>} />}>{(list) => (
-        <div className="space-y-3 px-4">{list.map((o) => (<Link key={o.id} to={`/offers/${o.id}`} className="flex items-center gap-3 rounded-2xl border border-line bg-card p-3">
+        <div className="space-y-3 px-4">{list.map((o) => (<Link key={o.id} to={`/offers/${o.id}`} className="flex min-w-0 items-center gap-3 rounded-2xl border border-line bg-card p-3">
           <Img src={o.club.images[0]} name={o.club.name} className="h-14 w-14 rounded-xl" />
-          <div className="min-w-0 flex-1"><p className="font-semibold">{o.club.name}</p><p className="truncate text-xs text-muted">{fmtDate(o.date)} · {o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore} · {o._count.requests} requests</p></div><Badge s={o.status} /></Link>))}</div>)}</Async>
+          <div className="min-w-0 flex-1"><p className="truncate font-semibold">{o.club.name}</p><p className="truncate text-xs text-muted">{fmtDate(o.date)} · {o.offerType} · {o.entryTypes?.length ? o.entryTypes.join(' & ') : o.entryType}</p><p className="text-xs text-muted">{o.entryFrom || '9:00 PM'}–{o.entryBefore} · {o._count.requests} requests</p>{o.event?.status === 'PENDING' && <p className="mt-1 text-xs font-semibold text-warn">Event and offer under admin review</p>}</div><Badge s={o.event?.status === 'PENDING' ? 'PENDING' : o.status} /></Link>))}</div>)}</Async>
       <Link to="/offers/new" className="fixed bottom-24 right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-lg" aria-label="Create offer"><Plus /></Link>
     </div>
   );
@@ -38,7 +40,7 @@ export function CreateOffer() {
         ...f, entryType: f.entryTypes.join(', '), status, eventId: event.id, date: event.date, price: f.offerType === 'Free Entry' || f.offerType === 'Ladies Night' ? 0 : +f.price,
       });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['offers'] }); nav('/offers', { replace: true }); },
+    onSuccess: (offer) => { qc.invalidateQueries({ queryKey: ['offers'] }); qc.invalidateQueries({ queryKey: ['p-clubs'] }); nav('/offers', { replace: true, state: { pendingReview: offer.eventStatus === 'PENDING' } }); },
     onError: (e) => setErr(errMsg(e)),
   });
   const onClub = (e) => { setF((old) => ({ ...old, clubId: e.target.value, eventId: '', eventTitle: '', djName: '', genre: '', eventBanner: '', date: '' })); };

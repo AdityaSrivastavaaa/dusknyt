@@ -75,11 +75,30 @@ r.post('/clubs/:id/events', wrap(async (req, res) => {
 }));
 r.get('/events', wrap(async (req, res) => {
   const where = req.query.status ? { status: String(req.query.status) } : { OR: [{ status: 'PENDING' }, { bannerChangePending: true }] };
-  res.json(await prisma.event.findMany({ where, include: { club: { select: { id: true, name: true, address: true, city: { select: { name: true } } } }, _count: { select: { offers: true } } }, orderBy: { date: 'asc' }, ...paging(req.query) }));
+  res.json(await prisma.event.findMany({ where, include: { club: { select: { id: true, name: true, address: true, city: { select: { name: true } } } }, _count: { select: { offers: true } }, offers: { select: { promoter: { select: { userId: true, brand: true } } }, distinct: ['promoterId'] } }, orderBy: { date: 'asc' }, ...paging(req.query) }));
+}));
+r.put('/events/:id', wrap(async (req, res) => {
+  const d = parse(z.object({ title: z.string().trim().min(2), djName: z.string().optional().nullable(), date: z.string(), startTime: z.string().trim().min(1), genre: z.string().optional().nullable(), poster: z.string().max(4_500_000).url().or(z.literal('')) }), req.body);
+  const current = await prisma.event.findUnique({ where: { id: req.params.id } });
+  if (!current) throw new ApiError(404, 'Event not found');
+  const date = new Date(`${d.date.slice(0, 10)}T00:00:00.000Z`);
+  const collision = await prisma.event.findFirst({ where: { id: { not: current.id }, clubId: current.clubId, date } });
+  if (collision) throw new ApiError(409, 'Another event already exists for this club and date');
+  const poster = d.poster || null;
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.event.update({ where: { id: current.id }, data: {
+      title: d.title, djName: d.djName || null, date, startTime: d.startTime, genre: d.genre || null,
+      ...(current.status === 'PENDING' ? { pendingPoster: poster, bannerChangePending: Boolean(poster) } : { pendingPoster: poster, bannerChangePending: poster !== current.poster }),
+    } });
+    if (date.getTime() !== current.date.getTime()) await tx.offer.updateMany({ where: { eventId: current.id }, data: { date } });
+    return result;
+  });
+  await logActivity(req.user, `Event '${updated.title}' details edited before review`, 'event', updated.id);
+  res.json(updated);
 }));
 r.post('/events/:id/review', wrap(async (req, res) => {
   const d = parse(z.object({ action: z.enum(['APPROVE_EVENT', 'REJECT_EVENT', 'APPROVE_BANNER', 'REJECT_BANNER']) }), req.body);
-  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+  const event = await prisma.event.findUnique({ where: { id: req.params.id }, include: { club: { select: { name: true } } } });
   if (!event) throw new ApiError(404, 'Event not found');
   let data;
   if (d.action === 'APPROVE_EVENT') {
@@ -92,11 +111,35 @@ r.post('/events/:id/review', wrap(async (req, res) => {
     if (!event.bannerChangePending) throw new ApiError(409, 'There is no event banner awaiting review');
     data = d.action === 'APPROVE_BANNER' ? { poster: event.pendingPoster, pendingPoster: null, bannerChangePending: false } : { pendingPoster: null, bannerChangePending: false };
   }
-  const updated = await prisma.event.update({ where: { id: event.id }, data });
+  const promoters = await prisma.promoter.findMany({ where: { offers: { some: { eventId: event.id } } }, select: { id: true, brand: true, userId: true } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.event.update({ where: { id: event.id }, data });
+    if (d.action === 'APPROVE_EVENT') {
+      await tx.offer.updateMany({ where: { eventId: event.id, status: 'UPCOMING' }, data: { status: 'ACTIVE' } });
+    }
+    const title = d.action === 'APPROVE_EVENT' ? 'Event approved and live' : d.action === 'REJECT_EVENT' ? 'Event not approved' : d.action === 'APPROVE_BANNER' ? 'Event banner approved' : 'Event banner update declined';
+    const body = d.action === 'APPROVE_EVENT' ? `${result.title} at ${event.club.name} is approved. Your offer is now visible to guests.`
+      : d.action === 'REJECT_EVENT' ? `${result.title} was not approved. Please contact DUSKNYT support if you need help.`
+        : d.action === 'APPROVE_BANNER' ? `The updated banner for ${result.title} is now visible to guests.` : `The banner update for ${result.title} was not approved.`;
+    for (const promoter of promoters) await tx.notification.create({ data: { userId: promoter.userId, title, body } });
+    return result;
+  });
   await logActivity(req.user, `Event '${event.title}' ${d.action.toLowerCase().replaceAll('_', ' ')}`, 'event', event.id);
   res.json(updated);
 }));
-r.delete('/events/:id', wrap(async (req, res) => { await prisma.event.delete({ where: { id: req.params.id } }); res.json({ ok: true }); }));
+r.delete('/events/:id', wrap(async (req, res) => {
+  const event = await prisma.event.findUnique({ where: { id: req.params.id }, include: { offers: { include: { promoter: { include: { user: { select: { id: true } } } } } } } });
+  if (!event) throw new ApiError(404, 'Event not found');
+  const promoters = [...new Map(event.offers.map((offer) => [offer.promoter.user.id, { id: offer.promoter.user.id, brand: offer.promoter.brand }])).values()];
+  await prisma.$transaction(async (tx) => {
+    // Keep booking history intact, but remove the event and all linked offers from guest discovery.
+    await tx.offer.updateMany({ where: { eventId: event.id }, data: { status: 'INACTIVE' } });
+    await tx.event.update({ where: { id: event.id }, data: { status: 'INACTIVE', pendingPoster: null, bannerChangePending: false } });
+    for (const promoter of promoters) await tx.notification.create({ data: { userId: promoter.id, title: 'Event removed', body: `${event.title} has been removed by DUSKNYT admin. Offers linked to this event have been deactivated.` } });
+  });
+  await logActivity(req.user, `Event '${event.title}' removed with linked offers deactivated`, 'event', event.id);
+  res.json({ ok: true });
+}));
 
 /* ----- promoters ----- */
 r.get('/promoters', wrap(async (req, res) => {

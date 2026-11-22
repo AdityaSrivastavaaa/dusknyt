@@ -80,6 +80,7 @@ model User {
   tickets            Ticket[]
   promoterRatings    PromoterRating[]
   arrivalMessages    ArrivalMessage[]
+  promoterLoginHistory PromoterLoginHistory[]
 }
 
 model Promoter {
@@ -313,6 +314,17 @@ model ActivityLog {
   entity    String?
   entityId  String?
   createdAt DateTime @default(now())
+}
+
+model PromoterLoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  loggedInAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedInAt])
 }
 
 model Setting {

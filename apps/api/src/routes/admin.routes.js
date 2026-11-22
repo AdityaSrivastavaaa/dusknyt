@@ -145,7 +145,7 @@ r.delete('/events/:id', wrap(async (req, res) => {
 r.get('/promoters', wrap(async (req, res) => {
   const where = req.query.q ? { OR: [{ brand: { contains: req.query.q, mode: 'insensitive' } }, { user: { phone: { contains: req.query.q } } }] } : {};
   const [items, total] = await Promise.all([
-    prisma.promoter.findMany({ where, include: { user: { select: { name: true, phone: true, email: true } }, offers: { select: { club: { select: { id: true, name: true } } } }, _count: { select: { offers: true } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }), prisma.promoter.count({ where }),
+    prisma.promoter.findMany({ where, include: { user: { select: { name: true, phone: true, email: true, promoterLoginHistory: { orderBy: { loggedInAt: 'desc' }, take: 1, select: { loggedInAt: true } } } }, offers: { select: { club: { select: { id: true, name: true } } } }, _count: { select: { offers: true } } }, orderBy: { createdAt: 'desc' }, ...paging(req.query) }), prisma.promoter.count({ where }),
   ]);
   res.json({ items, total });
 }));
@@ -165,7 +165,7 @@ r.post('/promoters', wrap(async (req, res) => {
   res.status(201).json({ user: publicUser(user), temporaryPassword, emailSent, emailError });
 }));
 r.get('/promoters/:id', wrap(async (req, res) => {
-  const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, include: { user: true, offers: { orderBy: { date: 'desc' }, take: 20, include: { club: { select: { name: true } } } }, payouts: { orderBy: { createdAt: 'desc' }, take: 10 } } });
+  const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, include: { user: { include: { promoterLoginHistory: { orderBy: { loggedInAt: 'desc' }, take: 30 } } }, offers: { orderBy: { date: 'desc' }, take: 20, include: { club: { select: { name: true } } } }, payouts: { orderBy: { createdAt: 'desc' }, take: 10 } } });
   if (!p) throw new ApiError(404, 'Promoter not found');
   const reqs = await prisma.guestRequest.groupBy({ by: ['status'], where: { offer: { promoterId: p.id } }, _count: true });
   const stats = Object.fromEntries(reqs.map((s) => [s.status, s._count]));

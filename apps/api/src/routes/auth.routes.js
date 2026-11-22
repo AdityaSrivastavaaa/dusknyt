@@ -11,6 +11,11 @@ import { env } from '../config/env.js';
 const r = Router();
 const phoneS = z.string().regex(/^\+?\d{10,13}$/, 'Invalid phone number').transform((p) => (p.startsWith('+') ? p : '+91' + p.slice(-10)));
 const session = (user, extra = {}) => ({ token: sign(user), user: publicUser(user), ...extra });
+const recordPromoterLogin = (req, user) => prisma.promoterLoginHistory.create({ data: {
+  userId: user.id,
+  ipAddress: req.ip || null,
+  userAgent: req.get('user-agent')?.slice(0, 500) || null,
+} });
 
 /* ---------- USER: phone OTP + Google ---------- */
 r.post('/user/send-otp', wrap(async (req, res) => {
@@ -47,6 +52,7 @@ r.post('/promoter/login', wrap(async (req, res) => {
   const { phone, password } = parse(z.object({ phone: phoneS, password: z.string().min(1) }), req.body);
   const u = await findPromoter(phone);
   if (!u.passwordHash || !(await bcrypt.compare(password, u.passwordHash))) throw new ApiError(401, 'Incorrect phone or password');
+  await recordPromoterLogin(req, u);
   if (u.mustChangePassword) return res.json(session(u, { mustChangePassword: true }));
   res.json(session(u));
 }));
@@ -59,6 +65,7 @@ r.post('/promoter/verify-otp', wrap(async (req, res) => {
   const { phone, otp } = parse(z.object({ phone: phoneS, otp: z.string().length(6) }), req.body);
   const u = await findPromoter(phone);
   if (!checkOtp(phone, otp)) throw new ApiError(400, 'Invalid or expired OTP');
+  await recordPromoterLogin(req, u);
   res.json(session(u));
 }));
 

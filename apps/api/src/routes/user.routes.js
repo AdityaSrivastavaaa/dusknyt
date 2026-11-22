@@ -8,6 +8,7 @@ import { arrivalSessionWindow, indiaStartOfDay } from '../lib/offer-time.js';
 import { createSupportTicket, supportTicketInclude, supportTicketDetailInclude } from '../lib/support.js';
 import { supportLimiter } from '../lib/rate-limit.js';
 import { isAtLeast21 } from '@dusknyt/shared';
+import { sendUserWelcome } from '../services/email.js';
 
 const r = Router();
 const adultOnly = (req, res, next) => isAtLeast21(req.user.dob) ? next() : next(new ApiError(403, 'DUSKNYT is available only to users aged 21 or older. Add your date of birth to continue.'));
@@ -123,14 +124,27 @@ r.get('/offers/:id', wrap(async (req, res) => {
 r.get('/me', authenticate, authorize('USER'), (req, res) => res.json(publicUser(req.user)));
 r.put('/me', authenticate, authorize('USER'), wrap(async (req, res) => {
   const d = parse(z.object({
-    name: z.string().min(2).optional(), email: z.string().email().optional().or(z.literal('')),
+    name: z.string().min(2), email: z.string().email(),
     dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isAtLeast21, 'DUSKNYT is available only to users aged 21 or older.'), avatar: z.string().url().optional().or(z.literal('')),
   }), req.body);
-  const u = await prisma.user.update({
+  const emailOwner = await prisma.user.findUnique({ where: { email: d.email }, select: { id: true } });
+  if (emailOwner && emailOwner.id !== req.user.id) throw new ApiError(409, 'This email is already linked to another DUSKNYT account');
+  let u = await prisma.user.update({
     where: { id: req.user.id },
-    data: { ...(d.name && { name: d.name }), ...(d.email !== undefined && { email: d.email || null }), ...(d.dob && { dob: new Date(d.dob) }), ...(d.avatar !== undefined && { avatar: d.avatar || null }) },
+    data: { name: d.name, email: d.email, dob: new Date(d.dob), ...(d.avatar !== undefined && { avatar: d.avatar || null }) },
   });
-  res.json(publicUser(u));
+  let welcomeEmailSent = Boolean(u.welcomeEmailSentAt); let welcomeEmailError = null;
+  if (!welcomeEmailSent) {
+    try {
+      await sendUserWelcome({ name: u.name, email: u.email });
+      u = await prisma.user.update({ where: { id: u.id }, data: { welcomeEmailSentAt: new Date() } });
+      welcomeEmailSent = true;
+    } catch (error) {
+      welcomeEmailError = 'Your profile is saved, but the welcome email could not be sent. Please try again later.';
+      console.error('User welcome email failed:', error.message);
+    }
+  }
+  res.json({ ...publicUser(u), welcomeEmailSent, welcomeEmailError });
 }));
 
 /* ---------- guestlist requests ---------- */

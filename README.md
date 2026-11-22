@@ -46,6 +46,11 @@ npm run dev                      # API + 3 apps together
 1. **Database**: create a Postgres on Neon or Supabase → copy the connection string.
 2. **API** on Render (`render.yaml` included) or Railway: set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`
    (`https://dusknyt.com,https://promoter.dusknyt.com,https://admin.dusknyt.com`). On boot it runs `prisma db push`.
+   For onboarding emails with Gmail SMTP, configure `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`,
+   `SMTP_SECURE=true`, `SMTP_USER`, `SMTP_PASS` (a Google App Password), and `EMAIL_FROM` (for example
+   `DUSKNYT <you@gmail.com>`). Promoter invites go to the promoter app; a user's first welcome email is sent
+   after profile setup saves their name, email, and date of birth. Render's free web services block outbound
+   SMTP, so Gmail SMTP requires a paid Render web service; for local testing, put these values in `apps/api/.env`.
    Seed once from your machine: `DATABASE_URL=<prod url> npm run db:seed` (this WIPES data — only for the very first deploy,
    and change the admin password afterwards; better: create your admin manually).
 3. **Frontends** on Vercel/Cloudflare Pages — one project per app:

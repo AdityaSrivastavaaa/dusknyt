@@ -109,13 +109,13 @@ export function Profile() {
 export function EditProfile() {
   const { user, update } = useAuth(); const nav = useNavigate();
   const [f, setF] = useState({ name: user.name || '', email: user.email || '', dob: user.dob?.slice(0, 10) || '', avatar: user.avatar || '' }); const [err, setErr] = useState('');
-  const save = useMutation({ mutationFn: () => http.put('/me', f), onSuccess: (u) => { update(u); nav(-1); }, onError: (e) => setErr(errMsg(e)) });
+  const save = useMutation({ mutationFn: () => http.put('/me', f), onSuccess: (result) => { const { welcomeEmailSent, welcomeEmailError, ...u } = result; update(u); if (!welcomeEmailSent) { setErr(welcomeEmailError || 'Profile saved, but the welcome email could not be sent.'); return; } nav(-1); }, onError: (e) => setErr(errMsg(e)) });
   return (
     <div>
       <Header back title="Edit Profile" />
       <div className="space-y-4 p-4"><div className="flex flex-col items-center gap-3"><Avatar src={f.avatar} name={f.name} size={88} /><label className="w-full rounded-xl border border-line bg-card p-3 text-xs text-muted">Upload profile photo from your phone<input type="file" accept="image/*" onChange={async (e) => { try { setErr(''); const avatar = await profilePhotoDataUrl(e.target.files?.[0]); setF((old) => ({ ...old, avatar })); } catch (error) { setErr(error.message || 'Could not read this image.'); } }} className="mt-2 block w-full text-sm text-fg" /></label>{f.avatar && <button type="button" onClick={() => setF((old) => ({ ...old, avatar: '' }))} className="text-xs text-bad">Remove photo</button>}</div>
         <Input label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-        <Input label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+        <Input label="Email address" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <Input label="Date of birth (21+ only)" type="date" max={minimumAdultDate()} value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
         {!isAtLeast21(f.dob) && <p className="text-xs text-bad">You must be at least 21 years old to use DUSKNYT.</p>}
         {err && <p className="text-xs text-bad">{err}</p>}<Button loading={save.isPending} disabled={!isAtLeast21(f.dob)} onClick={() => save.mutate()}>Save Changes</Button></div>

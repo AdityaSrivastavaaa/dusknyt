@@ -8,13 +8,22 @@ import { http } from '../lib/api';
 import { PageTitle, SearchBox, Table, Td, useDebounced } from '../components';
 
 export function UsersList() {
-  const [text, setText] = useState(''); const q = useDebounced(text); const qc = useQueryClient();
+  const [text, setText] = useState(''); const [notice, setNotice] = useState(''); const q = useDebounced(text); const qc = useQueryClient();
   const res = useQuery({ queryKey: ['a-users', q], queryFn: () => http.get('/admin/users', { q: q || undefined, limit: 50 }) });
   const set = useMutation({ mutationFn: ({ id, status }) => http.patch(`/admin/users/${id}/status`, { status }), onSuccess: () => qc.invalidateQueries({ queryKey: ['a-users'] }) });
-  return (<div><PageTitle title="Users" /><SearchBox value={text} onChange={setText} placeholder="Search users…" />
-    <Async q={res} empty={<EmptyState title="No users" />}>{(d) => (<Table head={['User', 'Phone', 'Joined', 'Status', '']}>{d.items.map((u) => (
+  const remove = useMutation({
+    mutationFn: (id) => http.del(`/admin/users/${id}`),
+    onSuccess: () => { setNotice('User account deleted.'); qc.invalidateQueries({ queryKey: ['a-users'] }); qc.invalidateQueries({ queryKey: ['a-dashboard'] }); },
+    onError: (e) => setNotice(errMsg(e)),
+  });
+  const deleteUser = (u) => {
+    if (!window.confirm(`Permanently delete ${u.name || u.phone || u.email || 'this user'}? Their bookings, support tickets, and account data will be deleted.`)) return;
+    setNotice(''); remove.mutate(u.id);
+  };
+  return (<div><PageTitle title="Users" /><SearchBox value={text} onChange={setText} placeholder="Search users…" />{notice && <p role="status" className="my-3 text-sm text-muted">{notice}</p>}
+    <Async q={res} empty={<EmptyState title="No users" />}>{(d) => (<Table head={['User', 'Phone', 'Joined', 'Status', 'Actions']}>{d.items.map((u) => (
       <tr key={u.id}><Td><span className="flex items-center gap-2"><Avatar src={u.avatar} name={u.name} size={28} />{u.name || '—'}</span></Td><Td>{u.phone || u.email}</Td><Td>{fmtDate(u.createdAt)}</Td><Td><Badge s={u.status} /></Td>
-        <Td><button className="text-xs text-brand" onClick={() => set.mutate({ id: u.id, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' })}>{u.status === 'ACTIVE' ? 'Block' : 'Unblock'}</button></Td></tr>))}
+        <Td><div className="flex items-center gap-3"><button className="text-xs text-brand" disabled={set.isPending || remove.isPending} onClick={() => set.mutate({ id: u.id, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' })}>{u.status === 'ACTIVE' ? 'Block' : 'Unblock'}</button><button className="text-xs text-bad disabled:opacity-50" disabled={remove.isPending} onClick={() => deleteUser(u)}>Delete</button></div></Td></tr>))}
       <tr><Td colSpan={5} className="text-xs text-muted">Showing {d.items.length} of {d.total} users</Td></tr></Table>)}</Async></div>);
 }
 

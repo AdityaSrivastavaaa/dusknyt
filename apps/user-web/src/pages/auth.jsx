@@ -78,10 +78,15 @@ export function Verify() {
 export function ProfileSetup() {
   const nav = useNavigate(); const { state } = useLocation(); const { user, update, logout } = useAuth();
   const [f, setF] = useState({ name: user?.name || '', email: user?.email || '', dob: user?.dob?.slice(0, 10) || '' }); const [err, setErr] = useState('');
+  const [welcomeSaved, setWelcomeSaved] = useState(false);
   const oldEnough = isAtLeast21(f.dob);
   const save = useMutation({
     mutationFn: () => http.put('/me', f),
-    onSuccess: (u) => { update(u); nav(state?.from || '/', { replace: true }); },
+    onSuccess: (result) => {
+      const { welcomeEmailSent, welcomeEmailError, ...u } = result; update(u);
+      if (!welcomeEmailSent) { setWelcomeSaved(true); setErr(welcomeEmailError || 'Profile saved, but the welcome email could not be sent. Please try again.'); return; }
+      nav(state?.from || '/', { replace: true });
+    },
     onError: (e) => setErr(errMsg(e)),
   });
   return (
@@ -89,11 +94,12 @@ export function ProfileSetup() {
       <h1 className="mt-8 text-center text-xl font-bold">Almost There!</h1><p className="mb-6 text-center text-xs text-muted">Tell us a bit about yourself</p>
       <div className="space-y-4">
         <Input label="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-        <Input label="Email (optional)" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+        <Input label="Email address" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <Input label="Date of birth (21+ only)" type="date" max={minimumAdultDate()} value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} />
         {f.dob && !oldEnough && <p className="text-xs text-bad">You must be at least 21 years old to use DUSKNYT.</p>}
         {err && <p className="text-xs text-bad">{err}</p>}
-        <Button loading={save.isPending} disabled={f.name.trim().length < 2 || !oldEnough} onClick={() => save.mutate()}>Continue</Button>
+        <Button loading={save.isPending} disabled={f.name.trim().length < 2 || !f.email.trim() || !oldEnough} onClick={() => save.mutate()}>{welcomeSaved ? 'Retry welcome email' : 'Continue'}</Button>
+        {welcomeSaved && <Button variant="outline" onClick={() => nav(state?.from || '/', { replace: true })}>Continue without email</Button>}
         {!oldEnough && <button type="button" onClick={() => { logout(); nav('/login', { replace: true }); }} className="w-full py-2 text-sm text-muted">Log out</button>}
       </div>
     </div>

@@ -7,6 +7,7 @@ import { ApiError, wrap, parse, paging, startOfDay, publicUser } from '../lib/ht
 import { decide, analytics } from '../services/guestlist.js';
 import { logActivity } from '../services/notify.js';
 import { supportTicketInclude } from '../lib/support.js';
+import { sendPromoterWelcome } from '../services/email.js';
 
 // Mounted behind authenticate + authorize('ADMIN','SUPER_ADMIN').
 const r = Router();
@@ -106,14 +107,19 @@ r.get('/promoters', wrap(async (req, res) => {
   res.json({ items, total });
 }));
 r.post('/promoters', wrap(async (req, res) => {
-  const d = parse(z.object({ name: z.string().min(2), phone: phoneS, email: z.string().email().optional().or(z.literal('')), brand: z.string().min(2), instagram: z.string().min(1) }), req.body);
+  const d = parse(z.object({ name: z.string().min(2), phone: phoneS, email: z.string().email(), brand: z.string().min(2), instagram: z.string().min(1) }), req.body);
+  const duplicate = await prisma.user.findFirst({ where: { OR: [{ phone: d.phone }, { email: d.email }], role: { in: ['USER', 'PROMOTER'] } }, select: { id: true } });
+  if (duplicate) throw new ApiError(409, 'That phone number or email already belongs to an account');
   const temporaryPassword = `DN${randomBytes(9).toString('base64url')}!`;
   const user = await prisma.user.create({
     data: { role: 'PROMOTER', name: d.name, phone: d.phone, email: d.email || null, passwordHash: await bcrypt.hash(temporaryPassword, 10), mustChangePassword: true, promoter: { create: { brand: d.brand, company: d.brand, instagram: d.instagram } } },
     include: { promoter: true },
   });
   await logActivity(req.user, `Promoter '${d.brand}' registered`, 'promoter', user.promoter.id);
-  res.status(201).json({ user: publicUser(user), temporaryPassword });
+  let emailSent = false; let emailError = null;
+  try { await sendPromoterWelcome({ name: d.name, brand: d.brand, phone: d.phone, email: d.email, temporaryPassword }); emailSent = true; }
+  catch (error) { emailError = error.message; console.error('Promoter welcome email failed:', error.message); }
+  res.status(201).json({ user: publicUser(user), temporaryPassword, emailSent, emailError });
 }));
 r.get('/promoters/:id', wrap(async (req, res) => {
   const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, include: { user: true, offers: { orderBy: { date: 'desc' }, take: 20, include: { club: { select: { name: true } } } }, payouts: { orderBy: { createdAt: 'desc' }, take: 10 } } });
@@ -130,11 +136,16 @@ r.put('/promoters/:id', wrap(async (req, res) => {
   res.json(p);
 }));
 r.post('/promoters/:id/reset-password', wrap(async (req, res) => {
-  const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+  const p = await prisma.promoter.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, email: true, phone: true, name: true } } } });
   if (!p) throw new ApiError(404, 'Promoter not found');
   const temporaryPassword = `DN${randomBytes(9).toString('base64url')}!`;
   await prisma.user.update({ where: { id: p.userId }, data: { passwordHash: await bcrypt.hash(temporaryPassword, 10), mustChangePassword: true } });
-  res.json({ temporaryPassword });
+  let emailSent = false; let emailError = null;
+  if (p.user.email) {
+    try { await sendPromoterWelcome({ name: p.user.name, brand: p.brand, phone: p.user.phone, email: p.user.email, temporaryPassword }); emailSent = true; }
+    catch (error) { emailError = error.message; console.error('Promoter password email failed:', error.message); }
+  } else emailError = 'No email address is saved for this promoter.';
+  res.json({ temporaryPassword, emailSent, emailError });
 }));
 
 /* ----- offers ----- */
@@ -210,6 +221,24 @@ r.patch('/users/:id/status', wrap(async (req, res) => {
   const u = await prisma.user.update({ where: { id: req.params.id }, data: { status } });
   await logActivity(req.user, `User ${u.phone || u.email} set ${status.toLowerCase()}`, 'user', u.id);
   res.json(publicUser(u));
+}));
+r.delete('/users/:id', wrap(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, role: true } });
+  if (!user || user.role !== 'USER') throw new ApiError(404, 'User not found');
+  await prisma.$transaction(async (tx) => {
+    // These relations are intentionally removed with the account; preserve an admin audit entry.
+    await tx.ticket.deleteMany({ where: { userId: user.id } });
+    await tx.guestRequest.deleteMany({ where: { userId: user.id } });
+    await tx.user.delete({ where: { id: user.id } });
+    await tx.activityLog.create({ data: {
+      actorId: req.user.id,
+      actorName: req.user.name || req.user.email || req.user.phone,
+      action: 'Deleted user account',
+      entity: 'user',
+      entityId: user.id,
+    } });
+  });
+  res.json({ ok: true, id: user.id });
 }));
 
 /* ----- analytics ----- */

@@ -23,7 +23,7 @@ r.post('/user/verify-otp', wrap(async (req, res) => {
   let user = await prisma.user.findUnique({ where: { phone } });
   if (user && user.role !== 'USER') throw new ApiError(403, 'This number belongs to a staff account');
   if (!user) user = await prisma.user.create({ data: { phone, role: 'USER' } });
-  res.json(session(user, { isNew: !user.name }));
+  res.json(session(user, { isNew: !user.name || !user.email || !user.dob }));
 }));
 r.post('/user/google', wrap(async (req, res) => {
   if (!env.googleClientId) throw new ApiError(501, 'Google login is not configured');
@@ -33,7 +33,7 @@ r.post('/user/google', wrap(async (req, res) => {
   let user = await prisma.user.findUnique({ where: { email: p.email } });
   if (user && user.role !== 'USER') throw new ApiError(403, 'This email belongs to a staff account');
   if (!user) user = await prisma.user.create({ data: { email: p.email, name: p.name, avatar: p.picture, role: 'USER' } });
-  res.json(session(user, { isNew: !user.name }));
+  res.json(session(user, { isNew: !user.name || !user.email || !user.dob }));
 }));
 
 /* ---------- PROMOTER: password or OTP (accounts are created by admins only) ---------- */

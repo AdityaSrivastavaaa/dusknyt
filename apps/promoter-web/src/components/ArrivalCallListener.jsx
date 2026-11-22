@@ -45,9 +45,9 @@ export function ArrivalCallListener() {
       if (isHidden && 'Notification' in window && Notification.permission === 'granted') {
         try {
           const notification = new Notification(kind === 'call' ? 'Incoming guest call · DUSKNYT' : 'New guest message · DUSKNYT', {
-            body: item.body || (kind === 'call'
-              ? `${item.guestName} is calling about ${item.eventTitle || item.clubName}.`
-              : `${item.guestName} sent a message about ${item.eventTitle || item.clubName}.`),
+            body: kind === 'call'
+              ? `${item.guestName || 'Guest'} · ${item.eventTitle || 'Guestlist'} at ${item.clubName || 'the club'}${item.guestCount ? ` · ${item.guestCount} guest${item.guestCount === 1 ? '' : 's'}` : ''}${item.entryType ? ` · ${item.entryType} entry` : ''}${item.entryBefore ? ` · By ${item.entryBefore}` : ''}${item.bookingCode ? ` · ${item.bookingCode}` : ''}`
+              : item.body || `${item.guestName} sent a message about ${item.eventTitle || item.clubName}.`,
             tag: `arrival-${item.requestId}`,
           });
           notification.onclick = () => { window.focus(); setAlert(null); navigate(`/arrival/${encodeURIComponent(item.requestId)}${kind === 'call' ? '?answer=1' : ''}`); notification.close(); };
@@ -70,7 +70,7 @@ export function ArrivalCallListener() {
         const cutoff = Date.now() - 15 * 60_000;
         for (const item of notifications) {
           if (item.title !== 'Incoming guest call' || item.isRead || !item.requestId || new Date(item.createdAt).getTime() < cutoff || seenNotificationIdsRef.current.has(item.id)) continue;
-          show('call')({ requestId: item.requestId, notificationId: item.id, guestName: 'Guest', body: item.body, clubName: 'your event', expiresAt: item.expiresAt ? new Date(item.expiresAt).getTime() : Date.now() + 60_000 });
+          show('call')({ requestId: item.requestId, notificationId: item.id, ...(item.booking || {}), body: item.body, clubName: item.booking?.clubName || 'your event', expiresAt: item.expiresAt ? new Date(item.expiresAt).getTime() : Date.now() + 60_000 });
         }
       } catch (error) {
         if (active && !socket.connected) setConnectionError(`Call alert service unavailable: ${error.message || 'check API connection'}`);
@@ -90,7 +90,7 @@ export function ArrivalCallListener() {
     {connectionError && <div role="status" className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+.5rem)] z-[79] mx-auto max-w-lg rounded-xl border border-warn/40 bg-card/95 px-3 py-2 text-center text-xs text-warn shadow-lg backdrop-blur">{connectionError} · checking saved call alerts</div>}
     {alert && <div role="alert" className="fixed inset-x-3 bottom-[5.5rem] z-[80] mx-auto max-w-lg rounded-2xl border border-brand/50 bg-card/95 p-4 shadow-2xl backdrop-blur-xl sm:bottom-6">
       <button type="button" aria-label="Dismiss alert" onClick={dismiss} className="absolute right-3 top-3 rounded-full p-1 text-muted hover:bg-line"><X size={16} /></button>
-      <div className="flex items-start gap-3 pr-6"><span className="mt-0.5 rounded-xl bg-brand/15 p-2 text-brand">{alert.kind === 'call' ? <Phone size={18} /> : <MessageCircle size={18} />}</span><div className="min-w-0 flex-1"><p className="font-bold">{alert.kind === 'call' ? 'Incoming guest call' : 'New guest message'}</p><p className="mt-1 break-words text-sm text-muted">{alert.body || `${alert.guestName} · ${alert.eventTitle || alert.clubName}${alert.guestCount ? ` · ${alert.guestCount} guest${alert.guestCount === 1 ? '' : 's'}` : ''}`}</p><div className="mt-3 flex gap-2"><Button className="!w-auto !py-2 text-xs" onClick={() => { const item = alert; setAlert(null); navigate(`/arrival/${encodeURIComponent(item.requestId)}${item.kind === 'call' ? '?answer=1' : ''}`); }}>{alert.kind === 'call' ? 'Answer call' : 'Open chat'}</Button>{alert.kind === 'call' && <Button variant="outline" className="!w-auto !py-2 text-xs" onClick={dismiss}>Decline</Button>}</div></div></div>
+      <div className="flex items-start gap-3 pr-6"><span className="mt-0.5 rounded-xl bg-brand/15 p-2 text-brand">{alert.kind === 'call' ? <Phone size={18} /> : <MessageCircle size={18} />}</span><div className="min-w-0 flex-1"><p className="font-bold">{alert.kind === 'call' ? 'Incoming guest call' : 'New guest message'}</p>{alert.kind === 'call' ? <div className="mt-1 space-y-0.5 text-sm text-muted"><p className="font-semibold text-fg">{alert.guestName || 'Guest'}{alert.bookingCode ? ` · ${alert.bookingCode}` : ''}</p><p className="break-words">{alert.eventTitle || 'Guestlist event'}{alert.clubName ? ` · ${alert.clubName}` : ''}</p><p className="break-words text-xs">{alert.guestCount ? `${alert.guestCount} guest${alert.guestCount === 1 ? '' : 's'}` : ''}{alert.entryType ? ` · ${alert.entryType} entry` : ''}{alert.entryBefore ? ` · Arrive by ${alert.entryBefore}` : ''}{alert.date ? ` · ${new Date(alert.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}` : ''}</p></div> : <p className="mt-1 break-words text-sm text-muted">{alert.body || `${alert.guestName} · ${alert.eventTitle || alert.clubName}`}</p>}<div className="mt-3 flex gap-2"><Button className="!w-auto !py-2 text-xs" onClick={() => { const item = alert; setAlert(null); navigate(`/arrival/${encodeURIComponent(item.requestId)}${item.kind === 'call' ? '?answer=1' : ''}`); }}>{alert.kind === 'call' ? 'Answer call' : 'Open chat'}</Button>{alert.kind === 'call' && <Button variant="outline" className="!w-auto !py-2 text-xs" onClick={dismiss}>Decline</Button>}</div></div></div>
     </div>}
   </>;
 }

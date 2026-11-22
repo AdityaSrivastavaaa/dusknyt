@@ -20,12 +20,14 @@ function PromoterGuard() {
 }
 
 function Main() {
+  const location = useLocation();
+  const isArrivalChat = location.pathname.startsWith('/arrival/');
   const q = useQuery({ queryKey: ['requests', 'new'], queryFn: () => http.get('/promoter/requests', { tab: 'new', limit: 1 }), refetchInterval: 30000 });
   const items = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }, { to: '/offers', label: 'Offers', icon: Ticket },
     { to: '/requests', label: 'Requests', icon: Inbox, badge: q.data?.newCount }, { to: '/guestlist', label: 'Guestlist', icon: Users }, { to: '/more', label: 'More', icon: MoreHorizontal },
   ];
-  return <Page nav><Outlet /><BottomNav items={items} /></Page>;
+  return <Page nav={!isArrivalChat}><Outlet />{!isArrivalChat && <BottomNav items={items} />}</Page>;
 }
 
 export default function App() {

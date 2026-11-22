@@ -102,7 +102,7 @@ export function attachArrivalSockets(server) {
           const { opensAt: callOpensAt, closesAt: callClosesAt } = sessionFor(request);
           const call = { requestId, description: payload?.description, expiresAt: callClosesAt?.getTime() || 0 };
           pendingCalls.set(requestId, call);
-          const details = await prisma.guestRequest.findUnique({ where: { id: requestId }, select: { user: { select: { name: true } }, guestCount: true, offer: { select: { date: true, clubId: true, club: { select: { name: true } }, eventId: true, event: { select: { title: true } } } } } });
+          const details = await prisma.guestRequest.findUnique({ where: { id: requestId }, select: { code: true, user: { select: { name: true } }, guestCount: true, offer: { select: { date: true, entryType: true, entryBefore: true, clubId: true, club: { select: { name: true } }, eventId: true, event: { select: { title: true, startTime: true } } } } } });
           const guestName = details?.user?.name || 'Guest';
           const clubName = details?.offer?.club?.name || 'Club';
           const eventTitle = details?.offer?.event?.title || null;
@@ -119,6 +119,11 @@ export function attachArrivalSockets(server) {
             guestCount: details?.guestCount || 1,
             clubName,
             eventTitle,
+            bookingCode: details?.code || null,
+            date: details?.offer?.date?.toISOString() || null,
+            startTime: details?.offer?.event?.startTime || details?.offer?.entryBefore || null,
+            entryType: details?.offer?.entryType || null,
+            entryBefore: details?.offer?.entryBefore || null,
             eventId: details?.offer?.eventId || null,
             clubId: details?.offer?.clubId || null,
             date: details?.offer?.date?.toISOString() || null,

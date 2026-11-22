@@ -252,9 +252,27 @@ r.get('/ratings', wrap(async (req, res) => {
 r.get('/notifications', wrap(async (req, res) => {
   const items = await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 });
   const requestIds = items.filter((item) => item.title === 'Incoming guest call' && item.requestId).map((item) => item.requestId);
-  const requests = requestIds.length ? await prisma.guestRequest.findMany({ where: { id: { in: requestIds }, offer: { promoterId: req.promoter.id } }, include: { offer: { include: { event: true } } } }) : [];
-  const expiresAtByRequest = new Map(requests.map((request) => [request.id, eventStartsAt(request.offer)?.toISOString() || null]));
-  res.json(items.map((item) => item.title === 'Incoming guest call' ? { ...item, expiresAt: expiresAtByRequest.get(item.requestId) || null } : item));
+  const requests = requestIds.length ? await prisma.guestRequest.findMany({ where: { id: { in: requestIds }, offer: { promoterId: req.promoter.id } }, include: { user: { select: { name: true } }, offer: { include: { club: { select: { name: true } }, event: true } } } }) : [];
+  const requestById = new Map(requests.map((request) => [request.id, request]));
+  res.json(items.map((item) => {
+    if (item.title !== 'Incoming guest call') return item;
+    const request = requestById.get(item.requestId);
+    return {
+      ...item,
+      expiresAt: request ? eventStartsAt(request.offer)?.toISOString() || null : null,
+      booking: request ? {
+        bookingCode: request.code,
+        guestName: request.user.name || 'Guest',
+        guestCount: request.guestCount,
+        clubName: request.offer.club.name,
+        eventTitle: request.offer.event?.title || null,
+        date: request.offer.date.toISOString(),
+        startTime: request.offer.event?.startTime || null,
+        entryType: request.offer.entryType,
+        entryBefore: request.offer.entryBefore,
+      } : null,
+    };
+  }));
 }));
 r.post('/notifications/read-all', wrap(async (req, res) => {
   await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });

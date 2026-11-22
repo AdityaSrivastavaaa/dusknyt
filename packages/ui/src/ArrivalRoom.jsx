@@ -6,9 +6,10 @@ import { Button, cx } from './components.jsx';
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const TURN_URL = import.meta.env.VITE_TURN_URL;
 
-export function ArrivalRoom({ token, requestId, title, onClose }) {
+export function ArrivalRoom({ token, requestId, title, autoAnswer = false, onClose }) {
   const socketRef = useRef(null); const peerRef = useRef(null); const streamRef = useRef(null); const pendingOfferRef = useRef(null); const pendingIceRef = useRef([]); const messagesEndRef = useRef(null); const audioRef = useRef(null); const closeTimerRef = useRef(null);
   const [connected, setConnected] = useState(false); const [status, setStatus] = useState('Connecting securely…'); const [messages, setMessages] = useState([]); const [draft, setDraft] = useState(''); const [error, setError] = useState(''); const [closesAt, setClosesAt] = useState(null); const [incoming, setIncoming] = useState(false); const [callState, setCallState] = useState('idle'); const [myId, setMyId] = useState('');
+  const autoAnswerStartedRef = useRef(false);
 
   useEffect(() => {
     const socket = io(`${apiUrl.replace(/\/$/, '')}/arrival`, { auth: { token }, autoConnect: true, transports: ['websocket', 'polling'] });
@@ -17,7 +18,10 @@ export function ArrivalRoom({ token, requestId, title, onClose }) {
     socket.on('connect', () => socket.emit('arrival:join', { requestId }, (result) => {
       if (!result?.ok) { setStatus(result?.error || 'Arrival session unavailable.'); socket.disconnect(); return; }
       setConnected(true); setStatus('Connected to this booking'); setMessages(result.messages || []); setClosesAt(result.closesAt); setMyId(result.userId || '');
-      if (result.incomingOffer?.description) { pendingOfferRef.current = result.incomingOffer; setIncoming(true); setCallState('incoming'); }
+      if (result.incomingOffer?.description) {
+        pendingOfferRef.current = result.incomingOffer; setIncoming(true); setCallState('incoming');
+        if (autoAnswer && !autoAnswerStartedRef.current) { autoAnswerStartedRef.current = true; setTimeout(() => acceptCall(), 0); }
+      }
       const delay = new Date(result.closesAt).getTime() - Date.now();
       if (delay > 0) closeTimerRef.current = setTimeout(() => { setStatus('The one-hour arrival session has ended.'); socket.emit('arrival:session-closed'); socket.disconnect(); setConnected(false); endCall(false); }, delay);
     }));
@@ -25,13 +29,13 @@ export function ArrivalRoom({ token, requestId, title, onClose }) {
     socket.on('arrival:message', addMessage);
     socket.on('arrival:peer', () => setStatus('The other person is connected'));
     socket.on('arrival:peer-left', () => setStatus('The other person disconnected'));
-    socket.on('call:offer', (offer) => { pendingOfferRef.current = offer; setIncoming(true); setCallState('incoming'); });
+    socket.on('call:offer', (offer) => { pendingOfferRef.current = offer; setIncoming(true); setCallState('incoming'); if (autoAnswer && !autoAnswerStartedRef.current) { autoAnswerStartedRef.current = true; setTimeout(() => acceptCall(), 0); } });
     socket.on('call:answer', async ({ description } = {}) => { if (description && peerRef.current) { await peerRef.current.setRemoteDescription(description); await applyPendingIce(peerRef.current); setCallState('connected'); } });
     socket.on('call:ice', async (candidate) => { try { if (candidate && peerRef.current) { if (peerRef.current.remoteDescription) await peerRef.current.addIceCandidate(candidate); else pendingIceRef.current.push(candidate); } } catch {} });
     socket.on('call:hangup', () => endCall(false));
     socket.on('arrival:session-closed', () => { setStatus('The one-hour arrival session has ended.'); setConnected(false); endCall(false); socket.disconnect(); });
     return () => { clearTimeout(closeTimerRef.current); socket.emit('arrival:session-closed'); socket.disconnect(); peerRef.current?.close(); streamRef.current?.getTracks().forEach((track) => track.stop()); };
-  }, [requestId, token]);
+  }, [requestId, token, autoAnswer]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -80,7 +84,13 @@ export function ArrivalRoom({ token, requestId, title, onClose }) {
       await peer.setRemoteDescription(pendingOfferRef.current.description); await applyPendingIce(peer);
       const description = await peer.createAnswer(); await peer.setLocalDescription(description);
       socketRef.current.emit('call:answer', { description }); setIncoming(false); setCallState('connected');
-    } catch (e) { setError(e.message || 'Could not answer the call. Check microphone access.'); endCall(false); }
+    } catch (e) {
+      const offer = pendingOfferRef.current;
+      endCall(false);
+      pendingOfferRef.current = offer;
+      setIncoming(Boolean(offer)); setCallState(offer ? 'incoming' : 'idle');
+      setError(e.message || 'Could not answer the call. Allow microphone access, then tap Answer call.');
+    }
   }
 
   const send = (event) => {

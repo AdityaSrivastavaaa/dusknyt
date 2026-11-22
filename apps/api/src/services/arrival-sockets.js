@@ -103,12 +103,22 @@ export function attachArrivalSockets(server) {
           const call = { requestId, description: payload?.description, expiresAt: callClosesAt?.getTime() || 0 };
           pendingCalls.set(requestId, call);
           const details = await prisma.guestRequest.findUnique({ where: { id: requestId }, select: { user: { select: { name: true } }, guestCount: true, offer: { select: { date: true, clubId: true, club: { select: { name: true } }, eventId: true, event: { select: { title: true } } } } } });
+          const guestName = details?.user?.name || 'Guest';
+          const clubName = details?.offer?.club?.name || 'Club';
+          const eventTitle = details?.offer?.event?.title || null;
+          const notification = await prisma.notification.create({ data: {
+            userId: request.offer.promoter.userId,
+            requestId,
+            title: 'Incoming guest call',
+            body: `${guestName} is calling about ${eventTitle || clubName}. Open this notification to answer.`,
+          } });
           arrival.to(promoterRoomFor(request.offer.promoter.userId)).except(roomFor(requestId)).emit('call:incoming', {
             requestId,
-            guestName: details?.user?.name || 'Guest',
+            notificationId: notification.id,
+            guestName,
             guestCount: details?.guestCount || 1,
-            clubName: details?.offer?.club?.name || 'Club',
-            eventTitle: details?.offer?.event?.title || null,
+            clubName,
+            eventTitle,
             eventId: details?.offer?.eventId || null,
             clubId: details?.offer?.clubId || null,
             date: details?.offer?.date?.toISOString() || null,

@@ -250,7 +250,11 @@ r.get('/ratings', wrap(async (req, res) => {
   }));
 }));
 r.get('/notifications', wrap(async (req, res) => {
-  res.json(await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 }));
+  const items = await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 });
+  const requestIds = items.filter((item) => item.title === 'Incoming guest call' && item.requestId).map((item) => item.requestId);
+  const requests = requestIds.length ? await prisma.guestRequest.findMany({ where: { id: { in: requestIds }, offer: { promoterId: req.promoter.id } }, include: { offer: { include: { event: true } } } }) : [];
+  const expiresAtByRequest = new Map(requests.map((request) => [request.id, eventStartsAt(request.offer)?.toISOString() || null]));
+  res.json(items.map((item) => item.title === 'Incoming guest call' ? { ...item, expiresAt: expiresAtByRequest.get(item.requestId) || null } : item));
 }));
 r.post('/notifications/read-all', wrap(async (req, res) => {
   await prisma.notification.updateMany({ where: { userId: req.user.id, isRead: false }, data: { isRead: true } });

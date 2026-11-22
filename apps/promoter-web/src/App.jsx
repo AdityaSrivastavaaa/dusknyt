@@ -9,12 +9,13 @@ import { MyOffers, CreateOffer, OfferDetail } from './pages/offers';
 import { Requests, RequestDetails, ReviewRequest, Guestlist, GuestlistEvent } from './pages/requests';
 import { More, EditProfile, ChangePassword, Notifications, Help, About } from './pages/profile';
 import { useAuth } from '@dusknyt/ui';
+import { ArrivalCallListener } from './components/ArrivalCallListener';
 
 function PromoterGuard() {
   const { token, user } = useAuth(); const location = useLocation();
   if (!token || user?.role !== 'PROMOTER') return <Navigate to="/login" replace />;
   if (user.mustChangePassword && location.pathname !== '/password') return <Navigate to="/password" replace />;
-  return <Outlet />;
+  return <><ArrivalCallListener /><Outlet /></>;
 }
 
 function Main() {

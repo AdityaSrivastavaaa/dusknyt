@@ -17,6 +17,7 @@ export function ArrivalRoom({ token, requestId, title, onClose }) {
     socket.on('connect', () => socket.emit('arrival:join', { requestId }, (result) => {
       if (!result?.ok) { setStatus(result?.error || 'Arrival session unavailable.'); socket.disconnect(); return; }
       setConnected(true); setStatus('Connected to this booking'); setMessages(result.messages || []); setClosesAt(result.closesAt); setMyId(result.userId || '');
+      if (result.incomingOffer?.description) { pendingOfferRef.current = result.incomingOffer; setIncoming(true); setCallState('incoming'); }
       const delay = new Date(result.closesAt).getTime() - Date.now();
       if (delay > 0) closeTimerRef.current = setTimeout(() => { setStatus('The one-hour arrival session has ended.'); socket.emit('arrival:session-closed'); socket.disconnect(); setConnected(false); endCall(false); }, delay);
     }));

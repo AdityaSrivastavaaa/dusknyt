@@ -23,7 +23,7 @@ export function ThemeToggle({ className }) {
 
 /* ---------- layout ---------- */
 export const Page = ({ children, className, wide, nav }) => (
-  <div className={cx('app-shell mx-auto min-h-screen w-full', wide ? 'max-w-6xl' : 'max-w-md', nav && 'page-with-nav', className)}>{children}</div>
+  <div className={cx('app-shell mx-auto box-border min-h-screen w-full max-w-[100vw] min-w-0', wide ? 'max-w-6xl' : 'max-w-md', nav && 'page-with-nav', className)}>{children}</div>
 );
 export function Header({ title, sub, back, right }) {
   const nav = useNavigate();
@@ -34,7 +34,7 @@ export function Header({ title, sub, back, right }) {
         <h1 className="max-w-full truncate text-lg font-semibold">{title}</h1>
         {sub && <p className="max-w-full truncate text-xs text-muted">{sub}</p>}
       </div>
-      {right && <div className="ml-auto flex shrink-0 items-center">{right}</div>}
+      {right && <div className="ml-auto flex max-w-[45%] shrink-0 items-center sm:max-w-none">{right}</div>}
     </div>
   );
 }
@@ -117,10 +117,10 @@ const tone = {
 };
 export const Badge = ({ s }) => <span className={cx('whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-bold uppercase', tone[s] || 'bg-line text-muted')}>{String(s || '').replace('_', ' ')}</span>;
 export const Stat = ({ label, value, hint, className }) => (
-  <Card className={cx('p-3', className)}><p className="text-[11px] text-muted">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p>{hint && <p className="text-[11px] text-ok">{hint}</p>}</Card>
+  <Card className={cx('min-w-0 p-3', className)}><p className="break-words text-[11px] text-muted">{label}</p><p className="mt-1 truncate text-xl font-bold sm:text-2xl">{value}</p>{hint && <p className="break-words text-[11px] text-ok">{hint}</p>}</Card>
 );
 export const Avatar = ({ src, name, size = 40 }) => src
-  ? <img src={src} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
+  ? <img src={src} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-full object-cover" />
   : <div style={{ width: size, height: size }} className="grid shrink-0 place-items-center rounded-full bg-brand/20 text-sm font-bold text-brand">{(name || '?')[0]}</div>;
 export function Img({ src, name, className }) {
   return src

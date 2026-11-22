@@ -11,7 +11,7 @@ export function Dashboard() {
   const q = useQuery({ queryKey: ['dashboard'], queryFn: () => http.get('/promoter/dashboard') });
   return (
     <div>
-      <div className="flex items-center justify-between p-4"><div><h1 className="text-xl font-bold">Hey {user.name?.split(' ')[0]} 👋</h1><p className="text-xs text-muted">Here's what's happening</p></div><Avatar src={user.avatar} name={user.name} /></div>
+      <div className="glass-bar sticky top-0 z-20 box-border flex w-full min-w-0 max-w-full items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="min-w-0 flex-1"><h1 className="truncate text-xl font-bold">Hey {user.name?.split(' ')[0]} 👋</h1><p className="truncate text-xs text-muted">Here's what's happening</p></div><Avatar src={user.avatar} name={user.name} /></div>
       <Async q={q}>{(d) => (<div className="space-y-5 px-4">
         <div><p className="mb-2 text-xs text-muted">Your Overview</p><div className="grid grid-cols-3 gap-2"><Stat label="New Requests" value={d.newRequests} /><Stat label="Confirmed" value={d.confirmed} /><Stat label="Active Offers" value={d.activeOffers} /></div></div>
         <div><div className="mb-2 flex justify-between"><h2 className="text-sm font-semibold">Upcoming Events</h2><Link to="/offers" className="text-xs text-brand">View all</Link></div>

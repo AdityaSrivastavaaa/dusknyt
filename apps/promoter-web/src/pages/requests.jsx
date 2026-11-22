@@ -7,7 +7,7 @@ import { REJECT_REASONS, formatINR, fmtDate, timeAgo } from '@dusknyt/shared';
 import { errMsg } from '@dusknyt/api-client';
 import { http } from '../lib/api';
 
-const Row = ({ k, v }) => <div className="flex justify-between py-1.5 text-sm"><span className="text-muted">{k}</span><span className="font-medium">{v}</span></div>;
+const Row = ({ k, v }) => <div className="flex min-w-0 items-start justify-between gap-3 py-1.5 text-sm"><span className="shrink-0 text-muted">{k}</span><span className="min-w-0 break-words text-right font-medium">{v}</span></div>;
 
 async function imageFileToDataUrl(file, maxWidth = 1400, maxHeight = 1800) {
   if (!file?.type.startsWith('image/')) throw new Error('Choose an image file.');
@@ -32,7 +32,7 @@ export function Requests() {
         {(d) => d.items.length === 0 ? <EmptyState title="No new requests" text="You're all caught up! New requests will appear here." /> : (
           <div className="divide-y divide-line">{d.items.map((r) => (
             <Link key={r.id} to={`/requests/${r.id}`} className="flex items-center gap-3 px-4 py-3"><Avatar name={r.user.name} />
-              <div className="min-w-0 flex-1"><p className="font-medium">{r.user.name}</p><p className="text-xs text-muted">{r.guestCount} Guests · {r.offer.entryType} Entry</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{r.user.name}</p><p className="text-xs text-muted">{r.guestCount} Guests · {r.offer.entryType} Entry</p></div>
               <div className="text-right"><p className="text-[11px] text-muted">{timeAgo(r.createdAt)}</p>{r.status !== 'PENDING' && <Badge s={r.status} />}</div></Link>))}</div>)}
       </Async>
     </div>
@@ -51,7 +51,7 @@ export function RequestDetails() {
     <div>
       <Header back title="Request Details" />
       <Async q={q}>{(r) => (<div className="space-y-4 p-4">
-        <div className="flex items-center gap-3"><Avatar name={r.user.name} size={48} /><div><p className="font-semibold">{r.user.name}</p><p className="text-xs text-muted">{r.user.phone}</p></div><div className="ml-auto"><Badge s={r.status} /></div></div>
+        <div className="flex min-w-0 items-center gap-3"><Avatar name={r.user.name} size={48} /><div className="min-w-0 flex-1"><p className="truncate font-semibold">{r.user.name}</p><p className="break-all text-xs text-muted">{r.user.phone}</p></div><div className="ml-auto shrink-0"><Badge s={r.status} /></div></div>
         <Card className="divide-y divide-line py-2"><Row k="Request ID" v={r.code} /><Row k="Club" v={r.offer.club.name} /><Row k="Entry type" v={`${r.offer.entryType} Entry`} /><Row k="Number of guests" v={r.guestCount} /><Row k="Arrive before" v={r.offer.entryBefore} />{r.checkedInAt && <Row k="Entry marked" v={new Date(r.checkedInAt).toLocaleString('en-IN')} />}{r.note && <Row k="Note" v={r.note} />}</Card>
         <Card><p className="mb-1 text-xs text-muted">Guests</p>{(r.guests || []).map((g, i) => <p key={i} className="text-sm">{i + 1}. {g.name}{g.gender ? ` (${g.gender})` : ''}</p>)}</Card>
         {r.status === 'CONFIRMED' && (r.checkedInAt ? <Card className="border-ok/40 text-sm text-ok">You marked this guest group as arrived at {new Date(r.checkedInAt).toLocaleString('en-IN')}. This does not confirm club admission.</Card> : <Card className="space-y-3"><p className="text-sm text-muted">Mark when this confirmed guest group has met your team. This records promoter arrival only, not club admission.</p>{checkInError && <p className="text-xs text-bad">{checkInError}</p>}{(() => { const opensAt = r.checkInOpensAt ? new Date(r.checkInOpensAt) : null; const canCheckIn = !opensAt || now >= opensAt.getTime(); const opensLabel = opensAt?.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }); return <Button loading={checkIn.isPending} disabled={!canCheckIn} onClick={() => { setCheckInError(''); checkIn.mutate(); }}>{canCheckIn ? 'Mark Guestlist Arrival' : `Opens at ${opensLabel}`}</Button>; })()}</Card>)}
@@ -74,7 +74,7 @@ export function ReviewRequest() {
     <div>
       <Header back title="Review Request" />
       <Async q={q}>{(r) => (<div className="space-y-4 p-4">
-        <div className="flex items-center gap-3"><Avatar name={r.user.name} size={48} /><div><p className="font-semibold">{r.user.name}</p><p className="text-xs text-muted">{r.user.phone}</p></div></div>
+        <div className="flex min-w-0 items-center gap-3"><Avatar name={r.user.name} size={48} /><div className="min-w-0 flex-1"><p className="truncate font-semibold">{r.user.name}</p><p className="break-all text-xs text-muted">{r.user.phone}</p></div></div>
         <Card className="divide-y divide-line py-2"><Row k="Entry type" v={`${r.offer.entryType} Entry`} /><Row k="Guests" v={r.guestCount} /><Row k="Arrive before" v={r.offer.entryBefore} /></Card>
         <p className="text-xs text-muted">Please review guest details carefully before confirming.</p>
         <Textarea label="Note for guest (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
